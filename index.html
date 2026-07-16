@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Learning Map Prototype</title>
+  <meta name="theme-color" content="#f5f5f7" />
+  <title>Learning Map</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div>
-        <h1>Learning Map</h1>
-        <p>Navigate concepts, open doors, and turn any region into active study.</p>
+        <h1>See what you know.</h1>
+        <p>Explore a course as a living map, then turn any concept into reading, recall, connections, and practice.</p>
       </div>
       <div class="topbar-actions">
         <button id="resetProgressBtn" class="secondary">Reset progress</button>
@@ -23,11 +24,11 @@
         <div class="panel-heading">
           <div>
             <h2>Interactive Computer Graphics</h2>
-            <p>Click a node to focus it. Drag the map and use the mouse wheel to zoom.</p>
+            <p>Select a concept to bring it into focus. Drag anywhere to explore.</p>
           </div>
-          <div class="zoom-controls">
+          <div class="zoom-controls" aria-label="Map controls">
             <button id="zoomOutBtn" aria-label="Zoom out">−</button>
-            <button id="resetViewBtn">Reset view</button>
+            <button id="resetViewBtn">Reset</button>
             <button id="zoomInBtn" aria-label="Zoom in">+</button>
           </div>
         </div>
@@ -41,7 +42,7 @@
         <div id="emptyState" class="empty-state">
           <div class="empty-icon">↗</div>
           <h2>Choose a concept</h2>
-          <p>The concept becomes a doorway into explanation, recall, connections, and practice.</p>
+          <p>Each point opens into an explanation, a recall exercise, a transfer task, and its nearby ideas.</p>
         </div>
 
         <div id="conceptView" class="concept-view hidden">
@@ -53,11 +54,11 @@
             <button id="markKnownBtn" class="secondary">Mark as learned</button>
           </div>
 
-          <div class="tabs" role="tablist">
+          <div class="tabs" role="tablist" aria-label="Study mode">
             <button class="tab active" data-mode="read">Read</button>
             <button class="tab" data-mode="recall">Recall</button>
             <button class="tab" data-mode="apply">Apply</button>
-            <button class="tab" data-mode="connections">Connections</button>
+            <button class="tab" data-mode="connections">Connect</button>
           </div>
 
           <div id="modeContent" class="mode-content"></div>
@@ -72,7 +73,7 @@
       <p data-field="why"></p>
     </article>
     <article class="study-card">
-      <h3>Core explanation</h3>
+      <h3>Core idea</h3>
       <p data-field="explanation"></p>
     </article>
     <article class="study-card">
@@ -80,12 +81,13 @@
       <p data-field="formal"></p>
     </article>
     <article class="study-card">
-      <h3>Typical mistake</h3>
+      <h3>Watch out for</h3>
       <p data-field="mistake"></p>
     </article>
   </template>
 
   <script src="data.js"></script>
   <script src="app.js"></script>
+  <script src="enhancements.js"></script>
 </body>
 </html>
