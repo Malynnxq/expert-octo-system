@@ -5,7 +5,11 @@ const state = {
   offsetX: 0,
   offsetY: 0,
   dragging: false,
-  dragStart: null,
+  dragStartX: 0,
+  dragStartY: 0,
+  startOffsetX: 0,
+  startOffsetY: 0,
+  framePending: false,
   learned: new Set(JSON.parse(localStorage.getItem("learningMapProgress") || "[]"))
 };
 
@@ -18,12 +22,15 @@ const conceptPath = document.getElementById("conceptPath");
 const modeContent = document.getElementById("modeContent");
 const markKnownBtn = document.getElementById("markKnownBtn");
 
+let mapRoot;
+const nodeElements = new Map();
+
 function conceptById(id) {
-  return concepts.find(c => c.id === id);
+  return concepts.find(concept => concept.id === id);
 }
 
 function childrenOf(id) {
-  return concepts.filter(c => c.parent === id);
+  return concepts.filter(concept => concept.parent === id);
 }
 
 function ancestorsOf(id) {
@@ -37,61 +44,48 @@ function ancestorsOf(id) {
 }
 
 function svgEl(name, attrs = {}) {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", name);
-  Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
-  return el;
+  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+  return element;
 }
 
-function renderMap() {
-  svg.innerHTML = "";
-  const width = viewport.clientWidth;
-  const height = viewport.clientHeight;
-  const root = svgEl("g", {
-    transform: `translate(${width / 2 + state.offsetX} ${height / 2 + state.offsetY}) scale(${state.scale})`
-  });
+function buildMapOnce() {
+  svg.replaceChildren();
+  nodeElements.clear();
+  mapRoot = svgEl("g", { class: "map-root" });
 
+  const edges = svgEl("g", { class: "edges" });
   for (const concept of concepts) {
     if (!concept.parent) continue;
     const parent = conceptById(concept.parent);
-    root.appendChild(svgEl("line", {
-      x1: parent.x,
-      y1: parent.y,
-      x2: concept.x,
-      y2: concept.y,
-      class: "edge"
+    edges.appendChild(svgEl("line", {
+      x1: parent.x, y1: parent.y, x2: concept.x, y2: concept.y, class: "edge"
     }));
   }
 
   for (const [a, b] of crossLinks) {
-    const ca = conceptById(a);
-    const cb = conceptById(b);
-    root.appendChild(svgEl("line", {
-      x1: ca.x,
-      y1: ca.y,
-      x2: cb.x,
-      y2: cb.y,
-      class: "edge cross"
+    const first = conceptById(a);
+    const second = conceptById(b);
+    edges.appendChild(svgEl("line", {
+      x1: first.x, y1: first.y, x2: second.x, y2: second.y, class: "edge cross"
     }));
   }
+  mapRoot.appendChild(edges);
 
+  const nodes = svgEl("g", { class: "nodes" });
   for (const concept of concepts) {
     const group = svgEl("g", {
-      class: [
-        "node",
-        concept.parent === null ? "root" : "",
-        state.learned.has(concept.id) ? "learned" : "",
-        state.selectedId === concept.id ? "selected" : ""
-      ].filter(Boolean).join(" "),
       transform: `translate(${concept.x} ${concept.y})`,
       tabindex: 0,
       role: "button",
-      "aria-label": concept.title
+      "aria-label": concept.title,
+      "data-id": concept.id
     });
 
     const radius = concept.parent === null ? 88 : 68;
     group.appendChild(svgEl("circle", { r: radius }));
 
-    const title = svgEl("text", { y: -4, "font-size": concept.parent === null ? 15 : 13 });
+    const title = svgEl("text", { "font-size": concept.parent === null ? 15 : 13 });
     wrapSvgText(title, concept.title, 17, 16);
     group.appendChild(title);
 
@@ -99,18 +93,26 @@ function renderMap() {
     subtitle.textContent = concept.subtitle;
     group.appendChild(subtitle);
 
+    group.addEventListener("pointerdown", event => event.stopPropagation());
     group.addEventListener("click", event => {
       event.stopPropagation();
       selectConcept(concept.id);
     });
     group.addEventListener("keydown", event => {
-      if (event.key === "Enter" || event.key === " ") selectConcept(concept.id);
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectConcept(concept.id);
+      }
     });
 
-    root.appendChild(group);
+    nodes.appendChild(group);
+    nodeElements.set(concept.id, group);
   }
 
-  svg.appendChild(root);
+  mapRoot.appendChild(nodes);
+  svg.appendChild(mapRoot);
+  updateNodeClasses();
+  updateMapTransform();
 }
 
 function wrapSvgText(textNode, text, maxChars, lineHeight) {
@@ -128,18 +130,47 @@ function wrapSvgText(textNode, text, maxChars, lineHeight) {
   }
   if (line) lines.push(line);
   const startY = -((lines.length - 1) * lineHeight) / 2;
-  lines.forEach((value, i) => {
-    const tspan = svgEl("tspan", { x: 0, y: startY + i * lineHeight - 2 });
+  lines.forEach((value, index) => {
+    const tspan = svgEl("tspan", { x: 0, y: startY + index * lineHeight - 2 });
     tspan.textContent = value;
     textNode.appendChild(tspan);
   });
+}
+
+function updateMapTransform() {
+  if (!mapRoot) return;
+  const x = viewport.clientWidth / 2 + state.offsetX;
+  const y = viewport.clientHeight / 2 + state.offsetY;
+  mapRoot.setAttribute("transform", `translate(${x} ${y}) scale(${state.scale})`);
+}
+
+function scheduleTransformUpdate() {
+  if (state.framePending) return;
+  state.framePending = true;
+  requestAnimationFrame(() => {
+    state.framePending = false;
+    updateMapTransform();
+  });
+}
+
+function updateNodeClasses() {
+  for (const concept of concepts) {
+    const element = nodeElements.get(concept.id);
+    if (!element) continue;
+    element.setAttribute("class", [
+      "node",
+      concept.parent === null ? "root" : "",
+      state.learned.has(concept.id) ? "learned" : "",
+      state.selectedId === concept.id ? "selected" : ""
+    ].filter(Boolean).join(" "));
+  }
 }
 
 function selectConcept(id) {
   state.selectedId = id;
   emptyState.classList.add("hidden");
   conceptView.classList.remove("hidden");
-  renderMap();
+  updateNodeClasses();
   renderConcept();
 }
 
@@ -147,7 +178,7 @@ function renderConcept() {
   const concept = conceptById(state.selectedId);
   if (!concept) return;
   conceptTitle.textContent = concept.title;
-  conceptPath.textContent = ancestorsOf(concept.id).map(c => c.title).join("  ›  ");
+  conceptPath.textContent = ancestorsOf(concept.id).map(item => item.title).join("  ›  ");
   markKnownBtn.textContent = state.learned.has(concept.id) ? "Learned ✓" : "Mark as learned";
   renderMode();
 }
@@ -157,11 +188,10 @@ function renderMode() {
   document.querySelectorAll(".tab").forEach(tab => {
     tab.classList.toggle("active", tab.dataset.mode === state.mode);
   });
-
   if (state.mode === "read") renderRead(concept);
-  if (state.mode === "recall") renderRecall(concept);
-  if (state.mode === "apply") renderApply(concept);
-  if (state.mode === "connections") renderConnections(concept);
+  else if (state.mode === "recall") renderRecall(concept);
+  else if (state.mode === "apply") renderApply(concept);
+  else renderConnections(concept);
 }
 
 function renderRead(concept) {
@@ -172,16 +202,12 @@ function renderRead(concept) {
   fragment.querySelector('[data-field="formal"]').textContent = concept.formal;
   fragment.querySelector('[data-field="mistake"]').textContent = concept.mistake;
 
+  const nearby = [concept, ...childrenOf(concept.id)];
+  const learnedCount = nearby.filter(item => state.learned.has(item.id)).length;
+  const percent = Math.round((learnedCount / nearby.length) * 100);
   const progressCard = document.createElement("article");
   progressCard.className = "study-card";
-  const descendants = [concept, ...childrenOf(concept.id)];
-  const learnedCount = descendants.filter(c => state.learned.has(c.id)).length;
-  const percent = Math.round((learnedCount / descendants.length) * 100);
-  progressCard.innerHTML = `
-    <h3>Region progress</h3>
-    <p>${learnedCount} of ${descendants.length} nearby concepts marked as learned.</p>
-    <div class="progress-line"><div class="progress-fill" style="width:${percent}%"></div></div>
-  `;
+  progressCard.innerHTML = `<h3>Region progress</h3><p>${learnedCount} of ${nearby.length} nearby concepts marked as learned.</p><div class="progress-line"><div class="progress-fill" style="width:${percent}%"></div></div>`;
   fragment.appendChild(progressCard);
   modeContent.replaceChildren(fragment);
 }
@@ -190,33 +216,21 @@ function renderRecall(concept) {
   const card = document.createElement("article");
   card.className = "study-card";
   card.innerHTML = `<h3>Fill the gaps</h3><p>Recall the missing concepts without opening the reading mode.</p>`;
-
   const sentence = concept.recall[0];
   const answers = [...sentence.matchAll(/{{(.*?)}}/g)].map(match => match[1]);
   let index = 0;
-  const html = sentence.replace(/{{(.*?)}}/g, () => {
-    const current = index++;
-    return `<input class="recall-input" data-answer="${escapeHtml(answers[current])}" aria-label="Missing phrase ${current + 1}" />`;
-  });
-
   const exercise = document.createElement("div");
   exercise.className = "recall-sentence";
-  exercise.innerHTML = html;
-
+  exercise.innerHTML = sentence.replace(/{{(.*?)}}/g, () => `<input class="recall-input" data-answer="${escapeHtml(answers[index++])}" aria-label="Missing phrase" />`);
   const check = document.createElement("button");
   check.textContent = "Check answers";
   const feedback = document.createElement("div");
   feedback.className = "feedback";
-
   check.addEventListener("click", () => {
-    const inputs = [...exercise.querySelectorAll("input")];
-    const correct = inputs.every(input => normalize(input.value) === normalize(input.dataset.answer));
+    const correct = [...exercise.querySelectorAll("input")].every(input => normalize(input.value) === normalize(input.dataset.answer));
     feedback.className = `feedback ${correct ? "good" : "bad"}`;
-    feedback.textContent = correct
-      ? "Correct. You reconstructed the anchor sentence."
-      : `Not yet. Expected: ${answers.join("; ")}.`;
+    feedback.textContent = correct ? "Correct. You reconstructed the anchor sentence." : `Not yet. Expected: ${answers.join("; ")}.`;
   });
-
   card.append(exercise, check, feedback);
   modeContent.replaceChildren(card);
 }
@@ -224,22 +238,14 @@ function renderRecall(concept) {
 function renderApply(concept) {
   const card = document.createElement("article");
   card.className = "study-card task-box";
-  card.innerHTML = `
-    <h3>Transfer task</h3>
-    <p>${concept.task}</p>
-    <textarea placeholder="Write your reasoning here..."></textarea>
-  `;
-
+  card.innerHTML = `<h3>Transfer task</h3><p>${concept.task}</p><textarea placeholder="Write your reasoning here..."></textarea>`;
   const reveal = document.createElement("button");
   reveal.textContent = "Show self-check criteria";
   const criteria = document.createElement("div");
   criteria.className = "feedback";
   reveal.addEventListener("click", () => {
     criteria.className = "study-card";
-    criteria.innerHTML = `
-      <h3>Self-check</h3>
-      <p>Your answer should use the formal anchor, explain the intuition, and distinguish this concept from at least one neighboring concept.</p>
-    `;
+    criteria.innerHTML = `<h3>Self-check</h3><p>Your answer should use the formal anchor, explain the intuition, and distinguish this concept from at least one neighboring concept.</p>`;
   });
   card.append(reveal, criteria);
   modeContent.replaceChildren(card);
@@ -253,26 +259,19 @@ function renderConnections(concept) {
     if (a === concept.id) connections.set(b, "cross-link");
     if (b === concept.id) connections.set(a, "cross-link");
   }
-
   const card = document.createElement("article");
   card.className = "study-card";
   card.innerHTML = `<h3>Doors from this concept</h3><p>Use these links to rehearse the map as a navigable structure.</p>`;
   const list = document.createElement("div");
   list.className = "connection-list";
-
-  if (connections.size === 0) {
-    list.innerHTML = "<p>No direct connections.</p>";
-  } else {
-    for (const [id, relation] of connections) {
-      const target = conceptById(id);
-      const button = document.createElement("button");
-      button.className = "connection-button";
-      button.innerHTML = `${target.title}<span>${relation} →</span>`;
-      button.addEventListener("click", () => selectConcept(id));
-      list.appendChild(button);
-    }
+  for (const [id, relation] of connections) {
+    const target = conceptById(id);
+    const button = document.createElement("button");
+    button.className = "connection-button";
+    button.innerHTML = `${target.title}<span>${relation} →</span>`;
+    button.addEventListener("click", () => selectConcept(id));
+    list.appendChild(button);
   }
-
   card.appendChild(list);
   modeContent.replaceChildren(card);
 }
@@ -282,7 +281,7 @@ function normalize(value) {
 }
 
 function escapeHtml(value) {
-  return value.replace(/[&<>"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]));
+  return value.replace(/[&<>"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[character]));
 }
 
 function saveProgress() {
@@ -294,8 +293,8 @@ markKnownBtn.addEventListener("click", () => {
   if (state.learned.has(state.selectedId)) state.learned.delete(state.selectedId);
   else state.learned.add(state.selectedId);
   saveProgress();
+  updateNodeClasses();
   renderConcept();
-  renderMap();
 });
 
 document.querySelectorAll(".tab").forEach(tab => {
@@ -308,47 +307,72 @@ document.querySelectorAll(".tab").forEach(tab => {
 document.getElementById("resetProgressBtn").addEventListener("click", () => {
   state.learned.clear();
   saveProgress();
-  renderMap();
+  updateNodeClasses();
   if (state.selectedId) renderConcept();
 });
 
-function zoomBy(factor) {
-  state.scale = Math.min(2.2, Math.max(0.55, state.scale * factor));
-  renderMap();
+function zoomAt(clientX, clientY, factor) {
+  const oldScale = state.scale;
+  const newScale = Math.min(2.2, Math.max(0.55, oldScale * factor));
+  if (newScale === oldScale) return;
+  const rect = viewport.getBoundingClientRect();
+  const pointerX = clientX - rect.left - rect.width / 2;
+  const pointerY = clientY - rect.top - rect.height / 2;
+  const worldX = (pointerX - state.offsetX) / oldScale;
+  const worldY = (pointerY - state.offsetY) / oldScale;
+  state.scale = newScale;
+  state.offsetX = pointerX - worldX * newScale;
+  state.offsetY = pointerY - worldY * newScale;
+  scheduleTransformUpdate();
 }
 
-document.getElementById("zoomInBtn").addEventListener("click", () => zoomBy(1.15));
-document.getElementById("zoomOutBtn").addEventListener("click", () => zoomBy(0.87));
+function zoomFromCenter(factor) {
+  const rect = viewport.getBoundingClientRect();
+  zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
+}
+
+document.getElementById("zoomInBtn").addEventListener("click", () => zoomFromCenter(1.16));
+document.getElementById("zoomOutBtn").addEventListener("click", () => zoomFromCenter(0.86));
 document.getElementById("resetViewBtn").addEventListener("click", () => {
   state.scale = 1;
   state.offsetX = 0;
   state.offsetY = 0;
-  renderMap();
+  scheduleTransformUpdate();
 });
 
 viewport.addEventListener("wheel", event => {
   event.preventDefault();
-  zoomBy(event.deltaY < 0 ? 1.08 : 0.92);
+  zoomAt(event.clientX, event.clientY, Math.exp(-event.deltaY * 0.0012));
 }, { passive: false });
 
 viewport.addEventListener("pointerdown", event => {
+  if (event.button !== 0) return;
   state.dragging = true;
-  state.dragStart = { x: event.clientX - state.offsetX, y: event.clientY - state.offsetY };
+  state.dragStartX = event.clientX;
+  state.dragStartY = event.clientY;
+  state.startOffsetX = state.offsetX;
+  state.startOffsetY = state.offsetY;
+  viewport.classList.add("dragging");
   viewport.setPointerCapture(event.pointerId);
 });
 
 viewport.addEventListener("pointermove", event => {
   if (!state.dragging) return;
-  state.offsetX = event.clientX - state.dragStart.x;
-  state.offsetY = event.clientY - state.dragStart.y;
-  renderMap();
+  state.offsetX = state.startOffsetX + event.clientX - state.dragStartX;
+  state.offsetY = state.startOffsetY + event.clientY - state.dragStartY;
+  scheduleTransformUpdate();
 });
 
-viewport.addEventListener("pointerup", event => {
+function finishDrag(event) {
+  if (!state.dragging) return;
   state.dragging = false;
-  viewport.releasePointerCapture(event.pointerId);
-});
+  viewport.classList.remove("dragging");
+  if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+}
 
-window.addEventListener("resize", renderMap);
-renderMap();
+viewport.addEventListener("pointerup", finishDrag);
+viewport.addEventListener("pointercancel", finishDrag);
+window.addEventListener("resize", scheduleTransformUpdate);
+
+buildMapOnce();
 selectConcept("graphics");
