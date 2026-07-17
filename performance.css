@@ -1,0 +1,23 @@
+/* Direct manipulation must follow the pointer immediately. */
+.map-root {
+  transition: none !important;
+  will-change: transform;
+}
+
+.map-viewport.dragging {
+  cursor: grabbing;
+}
+
+.map-viewport.dragging::after {
+  opacity: 0;
+}
+
+/* SVG drop shadows are costly to repaint while moving the whole graph. */
+.map-viewport.dragging .node circle {
+  filter: none !important;
+}
+
+.map-viewport.dragging .edge,
+.map-viewport.dragging .node circle {
+  transition: none !important;
+}
