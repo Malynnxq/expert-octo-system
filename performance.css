@@ -1,23 +1,50 @@
-/* Direct manipulation must follow the pointer immediately. */
-.map-root {
-  transition: none !important;
+/* Performance-critical map layer. Keep this file loaded after style.css. */
+.map-panel {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.map-viewport {
+  contain: strict;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+#mapSvg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1300px;
+  height: 1100px;
+  max-width: none;
+  overflow: visible;
+  transform-origin: 50% 50%;
   will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  pointer-events: none;
 }
 
-.map-viewport.dragging {
-  cursor: grabbing;
-}
+#mapSvg .node { pointer-events: auto; }
 
-.map-viewport.dragging::after {
-  opacity: 0;
-}
-
-/* SVG drop shadows are costly to repaint while moving the whole graph. */
-.map-viewport.dragging .node circle {
+/* SVG filters cause full-layer repaints in Safari. */
+.node circle,
+.node.root circle,
+.node.selected circle,
+.node:hover circle {
   filter: none !important;
 }
 
-.map-viewport.dragging .edge,
-.map-viewport.dragging .node circle {
+.map-root,
+.edge,
+.node,
+.node circle {
   transition: none !important;
 }
+
+.map-viewport.dragging,
+.map-viewport.is-dragging { cursor: grabbing; }
+
+.map-viewport.dragging::after,
+.map-viewport.is-dragging::after { opacity: 0; }
