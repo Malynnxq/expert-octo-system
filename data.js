@@ -102,3 +102,30 @@ for (const node of Object.values(knowledge)) {
 }
 
 const rootConceptId = "graphics";
+
+// Backward compatibility for older cached scripts that still expect `concepts`.
+const concepts = [];
+const layoutQueue = [{ id: rootConceptId, depth: 0, angle: -Math.PI / 2, x: 0, y: 0 }];
+const seen = new Set();
+while (layoutQueue.length) {
+  const item = layoutQueue.shift();
+  if (seen.has(item.id) || !knowledge[item.id]) continue;
+  seen.add(item.id);
+  const node = knowledge[item.id];
+  concepts.push({ ...node, x: item.x, y: item.y });
+  const children = node.children || [];
+  const radius = 280 + item.depth * 180;
+  children.forEach((childId, index) => {
+    const angle = children.length === 1
+      ? item.angle
+      : item.angle - Math.PI * 0.65 + index * (Math.PI * 1.3 / Math.max(1, children.length - 1));
+    layoutQueue.push({
+      id: childId,
+      depth: item.depth + 1,
+      angle,
+      x: item.x + Math.cos(angle) * radius,
+      y: item.y + Math.sin(angle) * radius
+    });
+  });
+}
+const crossLinks = [];
