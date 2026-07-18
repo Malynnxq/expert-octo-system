@@ -1,208 +1,104 @@
-const concepts = [
-  {
+const knowledge = {
+  graphics: {
     id: "graphics",
     title: "Interactive Computer Graphics",
-    subtitle: "course map",
+    subtitle: "course",
     parent: null,
-    x: 0,
-    y: 0,
-    why: "This is the central map. Every branch answers a different question: how geometry is represented, how it is transformed, how visibility is decided, and how pixels finally appear.",
-    explanation: "Computer graphics is a pipeline that turns a scene description into an image. The map is organized by transformations of information rather than by lecture order.",
-    formal: "Scene data → geometric processing → rasterization → fragment processing → framebuffer.",
-    mistake: "Memorizing isolated API calls without understanding which stage owns which responsibility.",
-    recall: ["A graphics pipeline transforms a {{scene description}} into an {{image}}."],
-    task: "Explain the whole rendering pipeline using no more than six sentences. Each sentence must describe one transformation of information."
+    children: ["geometry", "transformations", "visibility", "shading", "rasterization", "interaction"]
   },
-  {
+
+  geometry: {
     id: "geometry",
     title: "Geometry",
     subtitle: "what exists?",
     parent: "graphics",
-    x: -330,
-    y: -185,
-    why: "A renderer needs a mathematical description of shapes before it can display anything.",
-    explanation: "Geometry describes positions, directions, surfaces, and connectivity. Meshes approximate surfaces with vertices, edges, and faces, usually triangles.",
-    formal: "A triangle mesh can be represented as V = {vᵢ ∈ ℝ³} together with an index set F ⊂ ℕ³.",
-    mistake: "Confusing vertex positions with pixels. Vertices describe geometry; rasterization later determines pixel coverage.",
-    recall: ["A triangle mesh consists of {{vertices}} and indexed {{faces}}."],
-    task: "Describe why triangles are preferred over arbitrary polygons in real-time rendering."
+    children: ["meshes", "buffers", "normals"]
   },
-  {
+  transformations: {
     id: "transformations",
     title: "Transformations",
     subtitle: "where is it?",
     parent: "graphics",
-    x: 0,
-    y: -250,
-    why: "Objects, cameras, and projections must be expressed in compatible coordinate systems.",
-    explanation: "Transformations move data through object, world, view, clip, normalized-device, and screen spaces. Homogeneous coordinates allow translation and perspective to fit into matrix multiplication.",
-    formal: "p_clip = P · V · M · p_object.",
-    mistake: "Applying matrices in the wrong order. Matrix multiplication is not commutative.",
-    recall: ["The usual transform chain is {{model}}, {{view}}, then {{projection}}."],
-    task: "A model looks correct at the origin but moves strangely after rotation. Give two possible matrix-order causes."
+    children: ["coordinate-spaces", "model-transform", "camera-projection"]
   },
-  {
+  visibility: {
     id: "visibility",
     title: "Visibility",
     subtitle: "what can be seen?",
     parent: "graphics",
-    x: 330,
-    y: -185,
-    why: "Many parts of a scene should not contribute to the final image because they are outside the view or hidden behind other surfaces.",
-    explanation: "Visibility includes clipping, culling, and depth testing. Each removes work or resolves which surface is nearest.",
-    formal: "The depth test keeps a fragment when its depth satisfies the configured comparison against the depth buffer.",
-    mistake: "Treating back-face culling and depth testing as the same operation.",
-    recall: ["{{Back-face culling}} removes oriented faces; the {{depth test}} resolves overlapping fragments."],
-    task: "Explain a case where disabling back-face culling is necessary but keeping depth testing is still correct."
+    children: ["clipping", "culling", "depth-buffer"]
   },
-  {
+  shading: {
     id: "shading",
     title: "Shading",
     subtitle: "what does it look like?",
     parent: "graphics",
-    x: -330,
-    y: 190,
-    why: "Geometry alone gives silhouettes, but lighting and material models create visual appearance.",
-    explanation: "Shading combines surface properties, light, view direction, textures, and sometimes physically based approximations to compute color.",
-    formal: "A simple diffuse term is max(0, n · l), where n and l are normalized vectors.",
-    mistake: "Using unnormalized normals or light directions in dot products.",
-    recall: ["Diffuse lighting commonly depends on the dot product {{n · l}}."],
-    task: "Explain why a surface becomes dark when its normal points away from a light source."
+    children: ["lighting", "materials", "textures"]
   },
-  {
+  rasterization: {
     id: "rasterization",
     title: "Rasterization",
-    subtitle: "which pixels?",
+    subtitle: "which samples?",
     parent: "graphics",
-    x: 0,
-    y: 260,
-    why: "After geometric processing, continuous primitives must be converted into discrete pixel-sized samples.",
-    explanation: "Rasterization determines which screen samples a primitive covers and interpolates per-vertex values across the primitive.",
-    formal: "Barycentric coordinates interpolate an attribute a as a = λ₁a₁ + λ₂a₂ + λ₃a₃ with λ₁ + λ₂ + λ₃ = 1.",
-    mistake: "Thinking interpolation is linear in ordinary screen coordinates for every attribute; perspective-correct interpolation matters.",
-    recall: ["Rasterization converts primitives into candidate {{fragments}}."],
-    task: "Explain the difference between a fragment and a pixel."
+    children: ["fragments", "coverage", "barycentric-coordinates", "interpolation"]
   },
-  {
+  interaction: {
     id: "interaction",
     title: "Interaction",
     subtitle: "how does the user act?",
     parent: "graphics",
-    x: 330,
-    y: 190,
-    why: "Interactive graphics must react to input while maintaining a stable frame loop.",
-    explanation: "Interaction connects input events, scene updates, animation timing, and rendering. Picking maps screen-space actions back into the scene.",
-    formal: "A common frame loop is: process input → update state → render → present.",
-    mistake: "Tying movement directly to frame count instead of elapsed time.",
-    recall: ["Frame-rate independent motion scales updates by {{delta time}}."],
-    task: "Describe how you would select a 3D object by clicking on the screen."
+    children: ["frame-loop", "input", "picking"]
   },
-  {
-    id: "coordinates",
-    title: "Coordinate Spaces",
-    subtitle: "nested systems",
-    parent: "transformations",
-    x: -95,
-    y: -455,
-    why: "Each stage becomes easier when positions are expressed in the coordinate system most natural for that stage.",
-    explanation: "Object space belongs to the model, world space assembles the scene, view space is relative to the camera, and clip/NDC spaces prepare projection and viewport mapping.",
-    formal: "After perspective division: p_ndc = p_clip.xyz / p_clip.w.",
-    mistake: "Forgetting that directions and positions behave differently under translation.",
-    recall: ["Perspective division divides x, y, and z by the clip-space value {{w}}."],
-    task: "Explain why normals should not always be transformed with the same matrix as positions."
-  },
-  {
-    id: "camera",
-    title: "Camera & Projection",
-    subtitle: "view construction",
-    parent: "transformations",
-    x: 115,
-    y: -455,
-    why: "The camera defines the observer, while projection defines how 3D depth is mapped to a 2D image.",
-    explanation: "The view matrix transforms the world into camera space. Perspective projection makes distant objects appear smaller; orthographic projection preserves parallel scale.",
-    formal: "Perspective projection creates a depth-dependent scale before perspective division.",
-    mistake: "Thinking the camera physically moves the screen rather than transforming the world into view space.",
-    recall: ["The {{view matrix}} represents the inverse of the camera transform."],
-    task: "Compare perspective and orthographic projection using one practical application for each."
-  },
-  {
-    id: "buffers",
-    title: "Buffers",
-    subtitle: "GPU data flow",
-    parent: "geometry",
-    x: -520,
-    y: -360,
-    why: "The GPU needs compact, structured memory containing vertices, indices, uniforms, textures, and render targets.",
-    explanation: "Vertex buffers store per-vertex attributes; index buffers reuse vertices; framebuffers store rendered outputs; uniform or constant buffers store shared parameters.",
-    formal: "Indexed drawing references vertices by integer indices rather than duplicating vertex records.",
-    mistake: "Mismatching the vertex-layout description with the actual byte layout in memory.",
-    recall: ["An {{index buffer}} allows several triangles to reuse the same vertex."],
-    task: "Explain why indexed rendering often saves memory for a connected mesh."
-  },
-  {
-    id: "normals",
-    title: "Normals",
-    subtitle: "surface orientation",
-    parent: "shading",
-    x: -520,
-    y: 370,
-    why: "Lighting equations need a representation of local surface orientation.",
-    explanation: "A normal is perpendicular to a surface. Vertex normals can be interpolated to produce smooth shading even when the underlying mesh remains faceted.",
-    formal: "Under non-uniform scaling, normals are transformed by the inverse transpose of the model matrix's linear part.",
-    mistake: "Assuming the geometric face normal and a smoothed vertex normal always coincide.",
-    recall: ["Normals under non-uniform scale use the {{inverse-transpose}} matrix."],
-    task: "Explain how a low-poly sphere can look smooth without adding more triangles."
-  },
-  {
-    id: "textures",
-    title: "Textures",
-    subtitle: "sampled data",
-    parent: "shading",
-    x: -220,
-    y: 445,
-    why: "Textures let a surface carry detailed variation without encoding every detail in geometry.",
-    explanation: "Texture coordinates map points on geometry to locations in an image or other sampled resource. Filtering decides how samples are reconstructed.",
-    formal: "UV coordinates usually parameterize a 2D texture domain, commonly [0,1]².",
-    mistake: "Ignoring minification, magnification, wrapping, or mipmapping artifacts.",
-    recall: ["{{Mipmaps}} reduce aliasing when a texture is viewed at smaller projected sizes."],
-    task: "Explain why a checkerboard texture may shimmer in the distance and how mipmapping helps."
-  },
-  {
-    id: "depth",
-    title: "Depth Buffer",
-    subtitle: "nearest surface",
-    parent: "visibility",
-    x: 520,
-    y: -360,
-    why: "The renderer needs a scalable way to resolve overlapping surfaces for every screen sample.",
-    explanation: "The depth buffer stores the currently nearest accepted depth. Later fragments are compared against it according to the depth function.",
-    formal: "For a standard LESS test, a fragment passes when z_new < z_stored.",
-    mistake: "Forgetting to clear the depth buffer or using an unsuitable near/far range that destroys precision.",
-    recall: ["The depth buffer normally stores the closest accepted {{depth value}} per sample."],
-    task: "Explain why setting the near plane extremely close can worsen depth precision."
-  },
-  {
-    id: "picking",
-    title: "Picking",
-    subtitle: "screen to scene",
-    parent: "interaction",
-    x: 520,
-    y: 370,
-    why: "Users act in two-dimensional screen coordinates, while selectable objects may live in a three-dimensional scene.",
-    explanation: "Picking may use ray casting, color/ID buffers, bounding volumes, or spatial acceleration structures.",
-    formal: "Ray casting constructs a world-space ray from the camera through the clicked screen position.",
-    mistake: "Comparing coordinates that belong to different spaces without transforming them first.",
-    recall: ["Ray-based picking converts a click into a world-space {{ray}}."],
-    task: "Outline the steps required to turn a mouse click into a ray in world space."
-  }
+
+  meshes: { id: "meshes", title: "Meshes", subtitle: "surface structure", parent: "geometry", children: ["vertices", "edges", "faces", "topology"] },
+  buffers: { id: "buffers", title: "Buffers", subtitle: "GPU data", parent: "geometry", children: ["vertex-buffer", "index-buffer", "framebuffer"] },
+  normals: { id: "normals", title: "Normals", subtitle: "orientation", parent: "geometry", children: ["face-normals", "vertex-normals", "normal-matrix"] },
+
+  "coordinate-spaces": { id: "coordinate-spaces", title: "Coordinate Spaces", subtitle: "nested systems", parent: "transformations", children: ["object-space", "world-space", "view-space", "clip-space", "screen-space"] },
+  "model-transform": { id: "model-transform", title: "Model Transform", subtitle: "object to world", parent: "transformations", children: ["translation", "rotation", "scaling", "matrix-order"] },
+  "camera-projection": { id: "camera-projection", title: "Camera & Projection", subtitle: "world to image", parent: "transformations", children: ["view-matrix", "perspective", "orthographic", "perspective-division"] },
+
+  clipping: { id: "clipping", title: "Clipping", subtitle: "view volume", parent: "visibility", children: ["clip-space-test", "near-plane", "far-plane"] },
+  culling: { id: "culling", title: "Culling", subtitle: "remove surfaces", parent: "visibility", children: ["back-face-culling", "frustum-culling"] },
+  "depth-buffer": { id: "depth-buffer", title: "Depth Buffer", subtitle: "nearest surface", parent: "visibility", children: ["depth-test", "depth-precision", "z-fighting"] },
+
+  lighting: { id: "lighting", title: "Lighting", subtitle: "light interaction", parent: "shading", children: ["diffuse", "specular", "ambient", "light-direction"] },
+  materials: { id: "materials", title: "Materials", subtitle: "surface response", parent: "shading", children: ["albedo", "roughness", "metalness"] },
+  textures: { id: "textures", title: "Textures", subtitle: "sampled detail", parent: "shading", children: ["uv-coordinates", "filtering", "wrapping", "mipmaps"] },
+
+  fragments: { id: "fragments", title: "Fragments", subtitle: "pixel candidates", parent: "rasterization", children: ["fragment-shader", "discard", "framebuffer-output"] },
+  coverage: { id: "coverage", title: "Coverage", subtitle: "inside tests", parent: "rasterization", children: ["edge-functions", "sample-locations", "anti-aliasing"] },
+  "barycentric-coordinates": { id: "barycentric-coordinates", title: "Barycentric Coordinates", subtitle: "triangle weights", parent: "rasterization", children: ["geometric-meaning", "inside-triangle-test", "attribute-weights"] },
+  interpolation: { id: "interpolation", title: "Interpolation", subtitle: "values across surfaces", parent: "rasterization", children: ["linear-interpolation", "perspective-correct", "flat-interpolation"] },
+
+  "frame-loop": { id: "frame-loop", title: "Frame Loop", subtitle: "continuous update", parent: "interaction", children: ["delta-time", "update", "render", "present"] },
+  input: { id: "input", title: "Input", subtitle: "events and state", parent: "interaction", children: ["keyboard", "pointer", "gamepad"] },
+  picking: { id: "picking", title: "Picking", subtitle: "screen to scene", parent: "interaction", children: ["ray-casting", "id-buffer", "bounding-volumes"] }
+};
+
+const generatedLeafTitles = [
+  "Vertices", "Edges", "Faces", "Topology", "Vertex Buffer", "Index Buffer", "Framebuffer",
+  "Face Normals", "Vertex Normals", "Normal Matrix", "Object Space", "World Space", "View Space",
+  "Clip Space", "Screen Space", "Translation", "Rotation", "Scaling", "Matrix Order", "View Matrix",
+  "Perspective", "Orthographic", "Perspective Division", "Clip-Space Test", "Near Plane", "Far Plane",
+  "Back-Face Culling", "Frustum Culling", "Depth Test", "Depth Precision", "Z-Fighting", "Diffuse",
+  "Specular", "Ambient", "Light Direction", "Albedo", "Roughness", "Metalness", "UV Coordinates",
+  "Filtering", "Wrapping", "Mipmaps", "Fragment Shader", "Discard", "Framebuffer Output", "Edge Functions",
+  "Sample Locations", "Anti-Aliasing", "Geometric Meaning", "Inside-Triangle Test", "Attribute Weights",
+  "Linear Interpolation", "Perspective-Correct", "Flat Interpolation", "Delta Time", "Update", "Render",
+  "Present", "Keyboard", "Pointer", "Gamepad", "Ray Casting", "ID Buffer", "Bounding Volumes"
 ];
 
-const crossLinks = [
-  ["geometry", "transformations"],
-  ["geometry", "rasterization"],
-  ["normals", "transformations"],
-  ["textures", "rasterization"],
-  ["depth", "rasterization"],
-  ["picking", "camera"],
-  ["shading", "visibility"]
-];
+for (const title of generatedLeafTitles) {
+  const id = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (!knowledge[id]) knowledge[id] = { id, title, subtitle: "concept", parent: null, children: [] };
+}
+
+for (const node of Object.values(knowledge)) {
+  for (const childId of node.children || []) {
+    if (!knowledge[childId]) continue;
+    knowledge[childId].parent = node.id;
+  }
+}
+
+const rootConceptId = "graphics";
