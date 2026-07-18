@@ -179,7 +179,7 @@ function zoomAt(clientX, clientY, factor) {
 
 viewport.addEventListener("wheel", event => {
   event.preventDefault();
-  zoomAt(event.clientX, event.clientY, Math.exp(-event.deltaY * 0.0012));
+  zoomAt(event.clientX, event.clientY, Math.exp(-event.deltaY * 0.0026));
 }, { passive: false });
 
 viewport.addEventListener("pointerdown", event => {
