@@ -1,169 +1,232 @@
 const state = {
-  selectedId: "graphics",
+  focusId: rootConceptId,
+  selectedId: rootConceptId,
   scale: 1,
   offsetX: 0,
   offsetY: 0,
   dragging: false,
-  dragStartX: 0,
-  dragStartY: 0,
-  startOffsetX: 0,
-  startOffsetY: 0,
-  framePending: false
+  pointerId: null,
+  dragX: 0,
+  dragY: 0,
+  startX: 0,
+  startY: 0,
+  transitioning: false,
+  positions: new Map(),
+  lastFrame: performance.now()
 };
 
-const svg = document.getElementById("mapSvg");
 const viewport = document.getElementById("mapViewport");
-let mapRoot;
-const nodeElements = new Map();
+const svg = document.getElementById("mapSvg");
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const SVG_NS = "http://www.w3.org/2000/svg";
+let scene;
+let edgeLayer;
+let nodeLayer;
+let nodeElements = new Map();
+let edgeElements = [];
 
-function conceptById(id) {
-  return concepts.find(concept => concept.id === id);
-}
-
-function svgEl(name, attrs = {}) {
-  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
-  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+function svgElement(name, attributes = {}) {
+  const element = document.createElementNS(SVG_NS, name);
+  for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
   return element;
 }
 
-function wrapSvgText(textNode, text, maxChars, lineHeight) {
-  const words = text.split(" ");
+function currentNode() {
+  return knowledge[state.focusId];
+}
+
+function visibleIds() {
+  const focus = currentNode();
+  return [focus.id, ...(focus.children || [])];
+}
+
+function titleLines(title, max = 18) {
+  const words = title.split(" ");
   const lines = [];
   let line = "";
-
   for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (candidate.length > maxChars && line) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > max && line) {
       lines.push(line);
       line = word;
-    } else {
-      line = candidate;
-    }
+    } else line = next;
   }
-
   if (line) lines.push(line);
-  const startY = -((lines.length - 1) * lineHeight) / 2;
+  return lines;
+}
 
-  lines.forEach((value, index) => {
-    const tspan = svgEl("tspan", { x: 0, y: startY + index * lineHeight - 2 });
-    tspan.textContent = value;
-    textNode.appendChild(tspan);
+function initializePositions() {
+  state.positions.clear();
+  const ids = visibleIds();
+  state.positions.set(state.focusId, { x: 0, y: 0, vx: 0, vy: 0, angle: 0 });
+
+  const count = Math.max(1, ids.length - 1);
+  ids.slice(1).forEach((id, index) => {
+    const angle = -Math.PI / 2 + index * (Math.PI * 2 / count);
+    const radius = count <= 3 ? 300 : count <= 5 ? 350 : 390;
+    state.positions.set(id, {
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      vx: 0,
+      vy: 0,
+      angle
+    });
   });
 }
 
-function updateSelection() {
-  for (const [id, element] of nodeElements) {
-    const concept = conceptById(id);
-    element.setAttribute("class", [
-      "node",
-      concept.parent === null ? "root" : "",
-      state.selectedId === id ? "selected" : ""
-    ].filter(Boolean).join(" "));
-  }
-}
-
-function selectConcept(id) {
-  state.selectedId = id;
-  updateSelection();
-}
-
-function buildMapOnce() {
+function buildScene() {
   svg.replaceChildren();
-  nodeElements.clear();
-  mapRoot = svgEl("g", { class: "map-root" });
+  svg.setAttribute("viewBox", "-800 -650 1600 1300");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
 
-  const edges = svgEl("g", { class: "edges" });
-  for (const concept of concepts) {
-    if (!concept.parent) continue;
-    const parent = conceptById(concept.parent);
-    edges.appendChild(svgEl("line", {
-      x1: parent.x,
-      y1: parent.y,
-      x2: concept.x,
-      y2: concept.y,
-      class: "edge"
-    }));
+  scene = svgElement("g", { class: "semantic-scene" });
+  edgeLayer = svgElement("g", { class: "edges" });
+  nodeLayer = svgElement("g", { class: "nodes" });
+  scene.append(edgeLayer, nodeLayer);
+  svg.appendChild(scene);
+
+  nodeElements = new Map();
+  edgeElements = [];
+  initializePositions();
+
+  const focus = currentNode();
+  for (const childId of focus.children || []) {
+    const line = svgElement("line", { class: "edge" });
+    edgeLayer.appendChild(line);
+    edgeElements.push({ element: line, from: focus.id, to: childId });
   }
 
-  for (const [a, b] of crossLinks) {
-    const first = conceptById(a);
-    const second = conceptById(b);
-    edges.appendChild(svgEl("line", {
-      x1: first.x,
-      y1: first.y,
-      x2: second.x,
-      y2: second.y,
-      class: "edge cross"
-    }));
-  }
-
-  mapRoot.appendChild(edges);
-
-  const nodes = svgEl("g", { class: "nodes" });
-  for (const concept of concepts) {
-    const group = svgEl("g", {
-      transform: `translate(${concept.x} ${concept.y})`,
-      tabindex: 0,
+  for (const id of visibleIds()) {
+    const concept = knowledge[id];
+    const isFocus = id === state.focusId;
+    const group = svgElement("g", {
+      class: `node ${isFocus ? "focus" : "child"}${id === state.selectedId ? " selected" : ""}`,
       role: "button",
+      tabindex: "0",
       "aria-label": concept.title,
-      "data-id": concept.id
+      "data-id": id
     });
 
-    const radius = concept.parent === null ? 88 : 68;
-    group.appendChild(svgEl("circle", { r: radius }));
+    const radius = isFocus ? 110 : 76;
+    group.appendChild(svgElement("circle", { r: radius }));
 
-    const title = svgEl("text", { "font-size": concept.parent === null ? 15 : 13 });
-    wrapSvgText(title, concept.title, 17, 16);
-    group.appendChild(title);
-
-    const subtitle = svgEl("text", {
-      y: radius > 70 ? 38 : 31,
-      class: "node-subtitle"
+    const text = svgElement("text");
+    const lines = titleLines(concept.title, isFocus ? 23 : 17);
+    const lineHeight = isFocus ? 20 : 17;
+    const start = -((lines.length - 1) * lineHeight) / 2 - 7;
+    lines.forEach((line, index) => {
+      const span = svgElement("tspan", { x: 0, y: start + index * lineHeight });
+      span.textContent = line;
+      text.appendChild(span);
     });
-    subtitle.textContent = concept.subtitle;
+    group.appendChild(text);
+
+    const subtitle = svgElement("text", { class: "node-subtitle", y: isFocus ? 54 : 42 });
+    subtitle.textContent = concept.subtitle || "concept";
     group.appendChild(subtitle);
+
+    if (!isFocus && (concept.children || []).length) {
+      const marker = svgElement("text", { class: "depth-marker", y: -47 });
+      marker.textContent = "+";
+      group.appendChild(marker);
+    }
 
     group.addEventListener("pointerdown", event => event.stopPropagation());
     group.addEventListener("click", event => {
       event.stopPropagation();
-      selectConcept(concept.id);
+      selectNode(id);
+    });
+    group.addEventListener("dblclick", event => {
+      event.stopPropagation();
+      if (id !== state.focusId) enterNode(id);
     });
     group.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        selectConcept(concept.id);
+        if (id === state.selectedId && id !== state.focusId) enterNode(id);
+        else selectNode(id);
       }
     });
 
-    nodes.appendChild(group);
-    nodeElements.set(concept.id, group);
+    nodeLayer.appendChild(group);
+    nodeElements.set(id, group);
   }
 
-  mapRoot.appendChild(nodes);
-  svg.appendChild(mapRoot);
-  updateSelection();
-  updateMapTransform();
+  renderPositions();
+  updateCamera();
 }
 
-function updateMapTransform() {
-  const x = viewport.clientWidth / 2 + state.offsetX;
-  const y = viewport.clientHeight / 2 + state.offsetY;
-  mapRoot?.setAttribute("transform", `translate(${x} ${y}) scale(${state.scale})`);
+function selectNode(id) {
+  state.selectedId = id;
+  for (const [nodeId, element] of nodeElements) {
+    element.classList.toggle("selected", nodeId === id);
+  }
 }
 
-function scheduleTransformUpdate() {
-  if (state.framePending) return;
-  state.framePending = true;
-  requestAnimationFrame(() => {
-    state.framePending = false;
-    updateMapTransform();
-  });
+function enterNode(id) {
+  const node = knowledge[id];
+  if (!node || !node.children?.length || state.transitioning) return;
+  state.transitioning = true;
+  const selectedElement = nodeElements.get(id);
+  selectedElement?.classList.add("entering");
+
+  window.setTimeout(() => {
+    state.focusId = id;
+    state.selectedId = id;
+    state.scale = 1;
+    state.offsetX = 0;
+    state.offsetY = 0;
+    buildScene();
+    viewport.classList.add("level-entered");
+    requestAnimationFrame(() => viewport.classList.remove("level-entered"));
+    state.transitioning = false;
+  }, reduceMotion ? 0 : 260);
+}
+
+function exitLevel() {
+  const parentId = currentNode().parent;
+  if (!parentId || state.transitioning) return;
+  state.transitioning = true;
+  viewport.classList.add("level-exiting");
+
+  window.setTimeout(() => {
+    const previousId = state.focusId;
+    state.focusId = parentId;
+    state.selectedId = previousId;
+    state.scale = 1;
+    state.offsetX = 0;
+    state.offsetY = 0;
+    buildScene();
+    viewport.classList.remove("level-exiting");
+    state.transitioning = false;
+  }, reduceMotion ? 0 : 220);
+}
+
+function updateCamera() {
+  svg.style.transform = `translate3d(calc(-50% + ${state.offsetX}px), calc(-50% + ${state.offsetY}px), 0) scale(${state.scale})`;
 }
 
 function zoomAt(clientX, clientY, factor) {
+  if (state.transitioning) return;
   const oldScale = state.scale;
-  const newScale = Math.min(2.2, Math.max(0.55, oldScale * factor));
-  if (newScale === oldScale) return;
+  let newScale = oldScale * factor;
+
+  if (newScale > 2.35) {
+    const target = state.selectedId !== state.focusId ? state.selectedId : null;
+    if (target && knowledge[target]?.children?.length) {
+      enterNode(target);
+      return;
+    }
+    newScale = 2.35;
+  }
+
+  if (newScale < 0.52) {
+    if (currentNode().parent) {
+      exitLevel();
+      return;
+    }
+    newScale = 0.52;
+  }
 
   const rect = viewport.getBoundingClientRect();
   const pointerX = clientX - rect.left - rect.width / 2;
@@ -174,41 +237,88 @@ function zoomAt(clientX, clientY, factor) {
   state.scale = newScale;
   state.offsetX = pointerX - worldX * newScale;
   state.offsetY = pointerY - worldY * newScale;
-  scheduleTransformUpdate();
+  updateCamera();
 }
 
 viewport.addEventListener("wheel", event => {
   event.preventDefault();
-  zoomAt(event.clientX, event.clientY, Math.exp(-event.deltaY * 0.0026));
+  const factor = Math.exp(-event.deltaY * 0.0028);
+  zoomAt(event.clientX, event.clientY, factor);
 }, { passive: false });
 
 viewport.addEventListener("pointerdown", event => {
-  if (event.button !== 0) return;
+  if (event.button !== 0 || state.transitioning) return;
   state.dragging = true;
-  state.dragStartX = event.clientX;
-  state.dragStartY = event.clientY;
-  state.startOffsetX = state.offsetX;
-  state.startOffsetY = state.offsetY;
+  state.pointerId = event.pointerId;
+  state.dragX = event.clientX;
+  state.dragY = event.clientY;
+  state.startX = state.offsetX;
+  state.startY = state.offsetY;
   viewport.classList.add("dragging");
   viewport.setPointerCapture(event.pointerId);
 });
 
 viewport.addEventListener("pointermove", event => {
-  if (!state.dragging) return;
-  state.offsetX = state.startOffsetX + event.clientX - state.dragStartX;
-  state.offsetY = state.startOffsetY + event.clientY - state.dragStartY;
-  scheduleTransformUpdate();
+  if (!state.dragging || event.pointerId !== state.pointerId) return;
+  state.offsetX = state.startX + event.clientX - state.dragX;
+  state.offsetY = state.startY + event.clientY - state.dragY;
+  updateCamera();
 });
 
-function finishDrag(event) {
+function stopDragging(event) {
   if (!state.dragging) return;
   state.dragging = false;
   viewport.classList.remove("dragging");
   if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
 }
 
-viewport.addEventListener("pointerup", finishDrag);
-viewport.addEventListener("pointercancel", finishDrag);
-window.addEventListener("resize", scheduleTransformUpdate);
+viewport.addEventListener("pointerup", stopDragging);
+viewport.addEventListener("pointercancel", stopDragging);
 
-buildMapOnce();
+function renderPositions() {
+  for (const [id, position] of state.positions) {
+    nodeElements.get(id)?.setAttribute("transform", `translate(${position.x.toFixed(2)} ${position.y.toFixed(2)})`);
+  }
+  for (const edge of edgeElements) {
+    const a = state.positions.get(edge.from);
+    const b = state.positions.get(edge.to);
+    edge.element.setAttribute("x1", a.x.toFixed(2));
+    edge.element.setAttribute("y1", a.y.toFixed(2));
+    edge.element.setAttribute("x2", b.x.toFixed(2));
+    edge.element.setAttribute("y2", b.y.toFixed(2));
+  }
+}
+
+function animate(now) {
+  const dt = Math.min(0.035, (now - state.lastFrame) / 1000);
+  state.lastFrame = now;
+
+  if (!reduceMotion && !state.dragging && document.visibilityState === "visible") {
+    const focus = state.positions.get(state.focusId);
+    if (focus) {
+      focus.x *= 0.9;
+      focus.y *= 0.9;
+    }
+
+    for (const [id, position] of state.positions) {
+      if (id === state.focusId) continue;
+      const time = now * 0.00025;
+      const targetRadius = visibleIds().length <= 4 ? 300 : visibleIds().length <= 6 ? 350 : 390;
+      const targetX = Math.cos(position.angle + Math.sin(time + position.angle) * 0.035) * targetRadius;
+      const targetY = Math.sin(position.angle + Math.cos(time * 0.83 + position.angle) * 0.035) * targetRadius;
+      position.vx += (targetX - position.x) * 0.0045;
+      position.vy += (targetY - position.y) * 0.0045;
+      position.vx *= Math.pow(0.87, dt * 60);
+      position.vy *= Math.pow(0.87, dt * 60);
+      position.x += position.vx * dt * 60;
+      position.y += position.vy * dt * 60;
+    }
+    renderPositions();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener("resize", updateCamera);
+buildScene();
+requestAnimationFrame(animate);
