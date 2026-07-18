@@ -9,39 +9,290 @@
   <meta http-equiv="Expires" content="0" />
   <title>Infinite Learning Map</title>
   <style>
-    html, body, iframe {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      border: 0;
-      overflow: hidden;
-      display: block;
-      background: #f5f5f7;
-    }
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #f5f5f7; }
+    body { overscroll-behavior: none; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; }
+    #map { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+    #map.dragging { cursor: grabbing; }
   </style>
 </head>
 <body>
-  <iframe id="mapFrame" src="infinite-v4.html?v=20260719-2" title="Infinite learning map"></iframe>
+  <canvas id="map" aria-label="Continuously zoomable predefined learning map"></canvas>
   <script>
-    (() => {
-      const frame = document.getElementById('mapFrame');
-      frame.addEventListener('load', () => {
-        const win = frame.contentWindow;
-        const proto = win.CanvasRenderingContext2D && win.CanvasRenderingContext2D.prototype;
-        if (!proto || proto.__subtitlesRemoved) return;
+  (() => {
+    "use strict";
 
-        const originalFillText = proto.fillText;
-        proto.fillText = function(text, x, y, maxWidth) {
-          const font = String(this.font || '');
-          if (/^500\s/.test(font)) return;
-          return maxWidth === undefined
-            ? originalFillText.call(this, text, x, y)
-            : originalFillText.call(this, text, x, y, maxWidth);
-        };
-        proto.__subtitlesRemoved = true;
-        win.dispatchEvent(new win.Event('resize'));
+    const n = (id, title, children = []) => ({ id, title, children });
+    const tree = n("graphics", "Interactive Computer Graphics", [
+      n("geometry", "Geometry", [
+        n("meshes", "Meshes", [n("vertices", "Vertices"), n("edges", "Edges"), n("faces", "Faces"), n("topology", "Topology")]),
+        n("buffers", "Buffers", [n("vertex-buffer", "Vertex Buffer"), n("index-buffer", "Index Buffer"), n("framebuffer", "Framebuffer")]),
+        n("normals", "Normals", [n("face-normals", "Face Normals"), n("vertex-normals", "Vertex Normals"), n("normal-matrix", "Normal Matrix")])
+      ]),
+      n("transformations", "Transformations", [
+        n("coordinate-spaces", "Coordinate Spaces", [n("object-space", "Object Space"), n("world-space", "World Space"), n("view-space", "View Space"), n("clip-space", "Clip Space"), n("screen-space", "Screen Space")]),
+        n("model-transform", "Model Transform", [n("translation", "Translation"), n("rotation", "Rotation"), n("scaling", "Scaling"), n("matrix-order", "Matrix Order")]),
+        n("camera-projection", "Camera & Projection", [n("view-matrix", "View Matrix"), n("perspective", "Perspective"), n("orthographic", "Orthographic"), n("perspective-division", "Perspective Division")])
+      ]),
+      n("visibility", "Visibility", [
+        n("clipping", "Clipping", [n("clip-space-test", "Clip-Space Test"), n("near-plane", "Near Plane"), n("far-plane", "Far Plane")]),
+        n("culling", "Culling", [n("back-face-culling", "Back-Face Culling"), n("frustum-culling", "Frustum Culling")]),
+        n("depth-buffer", "Depth Buffer", [n("depth-test", "Depth Test"), n("depth-precision", "Depth Precision"), n("z-fighting", "Z-Fighting")])
+      ]),
+      n("shading", "Shading", [
+        n("lighting", "Lighting", [n("diffuse", "Diffuse"), n("specular", "Specular"), n("ambient", "Ambient"), n("light-direction", "Light Direction")]),
+        n("materials", "Materials", [n("albedo", "Albedo"), n("roughness", "Roughness"), n("metalness", "Metalness")]),
+        n("textures", "Textures", [n("uv-coordinates", "UV Coordinates"), n("filtering", "Filtering"), n("wrapping", "Wrapping"), n("mipmaps", "Mipmaps")])
+      ]),
+      n("rasterization", "Rasterization", [
+        n("fragments", "Fragments", [n("fragment-shader", "Fragment Shader"), n("discard", "Discard"), n("framebuffer-output", "Framebuffer Output")]),
+        n("coverage", "Coverage", [n("edge-functions", "Edge Functions"), n("sample-locations", "Sample Locations"), n("anti-aliasing", "Anti-Aliasing")]),
+        n("barycentric-coordinates", "Barycentric Coordinates", [n("geometric-meaning", "Geometric Meaning"), n("inside-triangle-test", "Inside-Triangle Test"), n("attribute-weights", "Attribute Weights")]),
+        n("interpolation", "Interpolation", [n("linear-interpolation", "Linear Interpolation"), n("perspective-correct", "Perspective-Correct"), n("flat-interpolation", "Flat Interpolation")])
+      ]),
+      n("interaction", "Interaction", [
+        n("frame-loop", "Frame Loop", [n("delta-time", "Delta Time"), n("update", "Update"), n("render", "Render"), n("present", "Present")]),
+        n("input", "Input", [n("keyboard", "Keyboard"), n("pointer", "Pointer"), n("gamepad", "Gamepad")]),
+        n("picking", "Picking", [n("ray-casting", "Ray Casting"), n("id-buffer", "ID Buffer"), n("bounding-volumes", "Bounding Volumes")])
+      ])
+    ]);
+
+    const FACETS = [["definition", "Definition"], ["intuition", "Intuition"], ["formal-rule", "Formal Rule"], ["worked-example", "Worked Example"], ["common-mistake", "Common Mistake"], ["practice", "Practice"]];
+    function addPredefinedFacets(node) {
+      if (!node.children.length) {
+        node.children = FACETS.map(([suffix, title]) => n(`${node.id}-${suffix}`, title));
+        return;
+      }
+      node.children.forEach(addPredefinedFacets);
+    }
+    addPredefinedFacets(tree);
+
+    const canvas = document.getElementById("map");
+    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const DPR_CAP = 2;
+    const DEPTH_RATIO = 0.215;
+    const nodes = [];
+    const edges = [];
+
+    function hash(text) {
+      let value = 2166136261;
+      for (let i = 0; i < text.length; i++) {
+        value ^= text.charCodeAt(i);
+        value = Math.imul(value, 16777619);
+      }
+      return (value >>> 0) / 4294967295;
+    }
+
+    function place(node, depth, x, y, angleSeed = -Math.PI / 2) {
+      node.depth = depth;
+      node.x = x;
+      node.y = y;
+      node.phase = hash(node.id) * Math.PI * 2;
+      nodes.push(node);
+      const count = node.children.length;
+      if (!count) return;
+      const ring = depth === 0 ? 340 : 118 * Math.pow(DEPTH_RATIO, depth - 1);
+      const offset = angleSeed + (depth % 2 ? Math.PI / Math.max(7, count * 2) : 0);
+      node.children.forEach((child, index) => {
+        const angle = offset + index * Math.PI * 2 / count;
+        child.x = x + Math.cos(angle) * ring;
+        child.y = y + Math.sin(angle) * ring;
+        edges.push({ a: node, b: child });
+        place(child, depth + 1, child.x, child.y, angle + Math.PI * 0.37);
       });
-    })();
+    }
+    place(tree, 0, 0, 0);
+
+    const camera = { scale: 1, x: 0, y: 0, targetScale: 1, targetX: 0, targetY: 0 };
+    let width = 1, height = 1, dpr = 1, dragging = false, pointerId = null, lastX = 0, lastY = 0, animationFrame = 0;
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
+      width = Math.max(1, innerWidth);
+      height = Math.max(1, innerHeight);
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      scheduleDraw();
+    }
+
+    function worldToScreen(node, now) {
+      const amplitude = reduceMotion ? 0 : Math.min(3.2, 1.1 / Math.max(camera.scale, 0.001));
+      return {
+        x: width / 2 + (node.x + Math.cos(now * 0.00022 + node.phase) * amplitude - camera.x) * camera.scale,
+        y: height / 2 + (node.y + Math.sin(now * 0.00019 + node.phase * 1.13) * amplitude - camera.y) * camera.scale
+      };
+    }
+
+    function nodeWorldRadius(node) {
+      if (node.depth === 0) return 88;
+      if (node.depth === 1) return 62;
+      return 62 * Math.pow(DEPTH_RATIO, node.depth - 1);
+    }
+
+    function smoothstep(a, b, value) {
+      const t = Math.max(0, Math.min(1, (value - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    }
+
+    function visibilityFor(projectedRadius) {
+      return Math.max(0, Math.min(1, smoothstep(7, 24, projectedRadius) * (1 - smoothstep(260, 720, projectedRadius))));
+    }
+
+    function inExtendedView(point, radius = 0) {
+      const margin = Math.min(900, Math.max(180, radius * 1.5));
+      return point.x + radius > -margin && point.x - radius < width + margin && point.y + radius > -margin && point.y - radius < height + margin;
+    }
+
+    function wrapText(text, maxWidth) {
+      const words = text.split(/\s+/);
+      const lines = [];
+      let line = "";
+      for (const word of words) {
+        const next = line ? `${line} ${word}` : word;
+        if (ctx.measureText(next).width > maxWidth && line) {
+          lines.push(line);
+          line = word;
+        } else line = next;
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    function drawNode({ node, point, radius, alpha }) {
+      const r = Math.max(1, radius);
+      const isRoot = node.depth === 0;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = isRoot ? "#1d1d1f" : "rgba(255,255,255,0.97)";
+      ctx.fill();
+      ctx.lineWidth = Math.max(0.8, Math.min(2.2, r * 0.028));
+      ctx.strokeStyle = isRoot ? "#1d1d1f" : "rgba(29,29,31,0.12)";
+      ctx.stroke();
+
+      if (r > 13) {
+        const fontSize = Math.max(9, Math.min(18, r * 0.24));
+        ctx.fillStyle = isRoot ? "#ffffff" : "#1d1d1f";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `650 ${fontSize}px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif`;
+        const lines = wrapText(node.title, r * 1.55).slice(0, 3);
+        const lineHeight = fontSize * 1.08;
+        const startY = point.y - (lines.length - 1) * lineHeight / 2;
+        lines.forEach((line, index) => ctx.fillText(line, point.x, startY + index * lineHeight));
+      }
+      ctx.restore();
+    }
+
+    function draw() {
+      animationFrame = 0;
+      const now = performance.now();
+      const easing = dragging ? 1 : 0.28;
+      camera.scale += (camera.targetScale - camera.scale) * easing;
+      camera.x += (camera.targetX - camera.x) * easing;
+      camera.y += (camera.targetY - camera.y) * easing;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = "#f5f5f7";
+      ctx.fillRect(0, 0, width, height);
+      const glow = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height) * 0.56);
+      glow.addColorStop(0, "rgba(0,113,227,0.055)");
+      glow.addColorStop(1, "rgba(0,113,227,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, width, height);
+
+      const screen = new Map();
+      for (const node of nodes) screen.set(node, worldToScreen(node, now));
+      ctx.lineCap = "round";
+      for (const edge of edges) {
+        const a = screen.get(edge.a), b = screen.get(edge.b);
+        const radius = nodeWorldRadius(edge.b) * camera.scale;
+        const alpha = visibilityFor(radius) * 0.18;
+        if (alpha < 0.008 || (!inExtendedView(a) && !inExtendedView(b))) continue;
+        ctx.strokeStyle = `rgba(29,29,31,${alpha})`;
+        ctx.lineWidth = Math.max(0.65, Math.min(2.2, radius * 0.035));
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+
+      const visible = [];
+      for (const node of nodes) {
+        const point = screen.get(node);
+        const radius = nodeWorldRadius(node) * camera.scale;
+        const alpha = visibilityFor(radius);
+        if (alpha < 0.01 || !inExtendedView(point, radius)) continue;
+        visible.push({ node, point, radius, alpha });
+      }
+      visible.sort((a, b) => a.radius - b.radius);
+      visible.forEach(drawNode);
+      if (!dragging && (!reduceMotion || Math.abs(camera.targetScale - camera.scale) > 0.0001)) scheduleDraw();
+    }
+
+    function scheduleDraw() {
+      if (!animationFrame) animationFrame = requestAnimationFrame(draw);
+    }
+
+    function zoomAt(clientX, clientY, deltaY) {
+      const rect = canvas.getBoundingClientRect();
+      const px = clientX - rect.left - width / 2;
+      const py = clientY - rect.top - height / 2;
+      const oldScale = camera.targetScale;
+      const newScale = Math.max(0.08, Math.min(1e12, oldScale * Math.exp(-deltaY * 0.0038)));
+      const worldX = camera.targetX + px / oldScale;
+      const worldY = camera.targetY + py / oldScale;
+      camera.targetScale = newScale;
+      camera.targetX = worldX - px / newScale;
+      camera.targetY = worldY - py / newScale;
+      scheduleDraw();
+    }
+
+    canvas.addEventListener("wheel", event => {
+      event.preventDefault();
+      zoomAt(event.clientX, event.clientY, event.deltaY);
+    }, { passive: false });
+
+    canvas.addEventListener("pointerdown", event => {
+      if (event.button !== 0) return;
+      dragging = true;
+      pointerId = event.pointerId;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      canvas.classList.add("dragging");
+      canvas.setPointerCapture(pointerId);
+    });
+
+    canvas.addEventListener("pointermove", event => {
+      if (!dragging || event.pointerId !== pointerId) return;
+      const dx = event.clientX - lastX, dy = event.clientY - lastY;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      camera.targetX -= dx / camera.targetScale;
+      camera.targetY -= dy / camera.targetScale;
+      camera.x = camera.targetX;
+      camera.y = camera.targetY;
+      scheduleDraw();
+    });
+
+    function stopDrag(event) {
+      if (!dragging) return;
+      dragging = false;
+      canvas.classList.remove("dragging");
+      if (event.pointerId === pointerId && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+      pointerId = null;
+      scheduleDraw();
+    }
+
+    canvas.addEventListener("pointerup", stopDrag);
+    canvas.addEventListener("pointercancel", stopDrag);
+    window.addEventListener("resize", resize);
+    document.addEventListener("visibilitychange", scheduleDraw);
+    resize();
+    scheduleDraw();
+  })();
   </script>
 </body>
 </html>
