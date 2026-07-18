@@ -7,85 +7,12 @@
   <title>Learning Map</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="performance.css" />
+  <link rel="stylesheet" href="map-only.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div>
-        <h1>See what you know.</h1>
-        <p>Explore a course as a living map, then turn any concept into reading, recall, connections, and practice.</p>
-      </div>
-      <div class="topbar-actions">
-        <button id="resetProgressBtn" class="secondary">Reset progress</button>
-      </div>
-    </header>
-
-    <main class="workspace">
-      <section class="map-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Interactive Computer Graphics</h2>
-            <p>Select a concept to bring it into focus. Drag anywhere to explore.</p>
-          </div>
-          <div class="zoom-controls" aria-label="Map controls">
-            <button id="zoomOutBtn" aria-label="Zoom out">−</button>
-            <button id="resetViewBtn">Reset</button>
-            <button id="zoomInBtn" aria-label="Zoom in">+</button>
-          </div>
-        </div>
-
-        <div id="mapViewport" class="map-viewport" tabindex="0">
-          <svg id="mapSvg" aria-label="Concept map"></svg>
-        </div>
-      </section>
-
-      <aside class="study-panel">
-        <div id="emptyState" class="empty-state">
-          <div class="empty-icon">↗</div>
-          <h2>Choose a concept</h2>
-          <p>Each point opens into an explanation, a recall exercise, a transfer task, and its nearby ideas.</p>
-        </div>
-
-        <div id="conceptView" class="concept-view hidden">
-          <div class="concept-header">
-            <div>
-              <div id="conceptPath" class="concept-path"></div>
-              <h2 id="conceptTitle"></h2>
-            </div>
-            <button id="markKnownBtn" class="secondary">Mark as learned</button>
-          </div>
-
-          <div class="tabs" role="tablist" aria-label="Study mode">
-            <button class="tab active" data-mode="read">Read</button>
-            <button class="tab" data-mode="recall">Recall</button>
-            <button class="tab" data-mode="apply">Apply</button>
-            <button class="tab" data-mode="connections">Connect</button>
-          </div>
-
-          <div id="modeContent" class="mode-content"></div>
-        </div>
-      </aside>
-    </main>
-  </div>
-
-  <template id="readTemplate">
-    <article class="study-card">
-      <h3>Why this matters</h3>
-      <p data-field="why"></p>
-    </article>
-    <article class="study-card">
-      <h3>Core idea</h3>
-      <p data-field="explanation"></p>
-    </article>
-    <article class="study-card">
-      <h3>Formal anchor</h3>
-      <p data-field="formal"></p>
-    </article>
-    <article class="study-card">
-      <h3>Watch out for</h3>
-      <p data-field="mistake"></p>
-    </article>
-  </template>
+  <main id="mapViewport" class="map-viewport" tabindex="0" aria-label="Interactive learning map">
+    <svg id="mapSvg" aria-label="Concept map"></svg>
+  </main>
 
   <script src="data.js"></script>
   <script src="app.js"></script>
