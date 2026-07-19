@@ -42,7 +42,7 @@ const nodes=[
 ['formal','formaler Berechenbarkeitsbegriff',190,680,62],['intuitive','intuitiver Berechenbarkeitsbegriff',420,670,62],['church','Churchsche These',-40,690,52],['registerMachine','Registermaschine',-60,870,46],['mu','µ-rekursive Funktionen',-140,1010,50],['lambda','λ-definierbare Funktionen',-20,1110,50],
 ['haltingProblem','Halteproblem',-900,1140,44],['reduction','Reduzierbarkeit',-650,1240,46],['pcp','Postsches Korrespondenzproblem',-360,1260,60],['goedel','Gödelscher Satz',-100,1170,46],['noncompFun','nicht berechenbare Funktion',-1130,960,56],['compReal','berechenbare reelle Zahl',-900,890,52],['noncompReal','nicht berechenbare reelle Zahl',-650,900,56],['semi','semi-entscheidbares Verfahren',-390,980,56],
 ['classes','Komplexitätsklassen',-1460,120,50],['pnp','P-NP-Problem',-1420,360,44],['npcomplete','NP-Vollständigkeit',-1180,560,48],['graphs','Graphenprobleme',-900,600,44]
-].map(([id,title,x,y,r,type='concept'])=>({id,title,x,y,r,type}));
+].map(([id,title,x,y,r,type='concept'])=>({id,title,x,y,r,type,vx:0,vy:0}));
 const H=[
 ['root','fun'],['root','rep'],['root','dec'],['root','tm'],['root','models'],['root','limits'],['root','complexity'],
 ['fun','procedure'],['fun','algorithm'],['fun','effective'],['fun','mapping'],['fun','total'],['fun','partial'],['fun','termination'],['fun','undefined'],['procedure','input'],['procedure','processing'],['procedure','output'],
@@ -70,9 +70,38 @@ const R=[
 ['church','formal','identifiziert mit'],['church','intuitive','identifiziert mit'],['haltingProblem','undecidableSet','ist Beispiel für'],['reduction','undecidableSet','überträgt'],
 ['classes','complexity','strukturieren'],['pnp','classes','vergleicht'],['npcomplete','pnp','zentral für']];
 const by=new Map(nodes.map(n=>[n.id,n]));
+const parent=new Map(H.map(([a,b])=>[b,a]));
+const domainIds=['fun','rep','dec','tm','models','limits','complexity'];
+domainIds.forEach((id,i)=>{const n=by.get(id),a=-Math.PI/2+i*Math.PI*2/domainIds.length;n.ax=Math.cos(a)*850;n.ay=Math.sin(a)*850});
+by.get('root').fixed=true;by.get('root').x=0;by.get('root').y=0;
+domainIds.forEach(id=>{const n=by.get(id);n.x=n.ax;n.y=n.ay;n.fixed=true});
+const links=[...H.map(([a,b])=>({a:by.get(a),b:by.get(b),kind:'h'})),...R.map(([a,b])=>({a:by.get(a),b:by.get(b),kind:'r'}))];
+function desired(l){if(l.a.type==='root'||l.b.type==='root')return 850;if(l.a.type==='domain'||l.b.type==='domain')return 245;return l.kind==='h'?155:235}
+function layout(){
+ const movable=nodes.filter(n=>!n.fixed);
+ for(let iter=0;iter<520;iter++){
+  const cool=1-iter/520;
+  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+   const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy+1,d=Math.sqrt(d2),nx=dx/d,ny=dy/d,min=a.r+b.r+24;
+   let f=9000/d2;if(d<min)f+=(min-d)*.28;
+   if(!a.fixed){a.vx-=nx*f;a.vy-=ny*f}if(!b.fixed){b.vx+=nx*f;b.vy+=ny*f}
+  }
+  for(const l of links){const dx=l.b.x-l.a.x,dy=l.b.y-l.a.y,d=Math.hypot(dx,dy)||1,nx=dx/d,ny=dy/d,k=l.kind==='h'?.022:.008,f=(d-desired(l))*k;if(!l.a.fixed){l.a.vx+=nx*f;l.a.vy+=ny*f}if(!l.b.fixed){l.b.vx-=nx*f;l.b.vy-=ny*f}}
+  for(const n of movable){const p=parent.get(n.id)?by.get(parent.get(n.id)):null;if(p&&p.type==='domain'){n.vx+=(p.x-n.x)*.0018;n.vy+=(p.y-n.y)*.0018}n.vx*=.78;n.vy*=.78;const max=14*cool+1.5,sp=Math.hypot(n.vx,n.vy);if(sp>max){n.vx=n.vx/sp*max;n.vy=n.vy/sp*max}n.x+=n.vx;n.y+=n.vy}
+ }
+ for(let pass=0;pass<180;pass++){
+  let moved=false;
+  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+   const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||.001,min=a.r+b.r+28;
+   if(d<min){moved=true;const push=(min-d)/2,nx=dx/d,ny=dy/d;if(!a.fixed){a.x-=nx*push;a.y-=ny*push}if(!b.fixed){b.x+=nx*push;b.y+=ny*push}}
+  }
+  if(!moved)break;
+ }
+}
+layout();
 function el(n,a={}){const e=document.createElementNS('http://www.w3.org/2000/svg',n);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e}
 function line(a,b,c){const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;return el('line',{x1:a.x+dx/d*a.r,y1:a.y+dy/d*a.r,x2:b.x-dx/d*b.r,y2:b.y-dy/d*b.r,class:c+' progressive'})}
-const hEls=[];H.forEach(([a,b])=>{const x=line(by.get(a),by.get(b),'edge');const root=by.get(a).type==='root';if(!root)x.classList.add('hidden');hEls.push({x,root});E.appendChild(x)});
+const hEls=[];H.forEach(([a,b])=>{const x=line(by.get(a),by.get(b),'edge'),root=by.get(a).type==='root';if(!root)x.classList.add('hidden');hEls.push({x,root});E.appendChild(x)});
 const rEls=[];R.forEach(([a,b,t])=>{const A=by.get(a),B=by.get(b),x=line(A,B,'relation');x.classList.add('hidden');E.appendChild(x);const q=el('text',{x:(A.x+B.x)/2,y:(A.y+B.y)/2-8,class:'relation-label progressive hidden'});q.textContent=t;L.appendChild(q);rEls.push({x,q})});
 function wrap(s,m=18){const w=s.split(/\s+/),o=[];let l='';for(const z of w){const n=l?l+' '+z:z;if(n.length>m&&l){o.push(l);l=z}else l=n}if(l)o.push(l);return o.slice(0,4)}
 const cEls=[];nodes.forEach(n=>{const g=el('g',{class:'node '+n.type+' progressive',transform:`translate(${n.x} ${n.y})`});if(n.type==='concept')g.classList.add('hidden');g.appendChild(el('circle',{r:n.r}));const ls=wrap(n.title,n.type==='root'?22:n.type==='domain'?19:17),lh=n.type==='root'?23:n.type==='domain'?19:16;ls.forEach((s,i)=>{const t=el('text',{x:0,y:(i-(ls.length-1)/2)*lh+5});t.textContent=s;g.appendChild(t)});N.appendChild(g);if(n.type==='concept')cEls.push(g)});
@@ -83,7 +112,8 @@ function apply(){vp.setAttribute('transform',`translate(${tx} ${ty}) scale(${s})
 svg.addEventListener('wheel',e=>{e.preventDefault();const b=svg.getBoundingClientRect(),px=e.clientX-b.left,py=e.clientY-b.top,f=Math.exp(-e.deltaY*.0012),ns=Math.max(.6,Math.min(8,s*f));tx=px-(px-tx)*ns/s;ty=py-(py-ty)*ns/s;s=ns;apply()},{passive:false});
 svg.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag=true;pid=e.pointerId;lx=e.clientX;ly=e.clientY;svg.classList.add('dragging');svg.setPointerCapture(pid)});
 svg.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==pid)return;tx+=e.clientX-lx;ty+=e.clientY-ly;lx=e.clientX;ly=e.clientY;apply()});
-function stop(e){if(!drag)return;drag=false;svg.classList.remove('dragging');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId)}svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);update();
+function stop(e){if(!drag)return;drag=false;svg.classList.remove('dragging');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId)}
+svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);update();
 })();
 </script>
 </body>
