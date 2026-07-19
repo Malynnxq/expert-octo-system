@@ -1,0 +1,1 @@
+window.ICG_CHAPTER2=window.ICG_BRANCHES.slice();window.ICG_BRANCHES=[{"title":"Chapter 1 - Introduction","children":window.ICG_CHAPTER1},{"title":"Chapter 2 - The Rendering Pipeline","children":window.ICG_CHAPTER2}];
