@@ -11,7 +11,9 @@
   .edge{stroke:#8e8e93;stroke-width:1.4;opacity:.38;fill:none}.relation{stroke:#0071e3;stroke-width:1.4;stroke-dasharray:6 5;opacity:.62;fill:none;marker-end:url(#arrow)}
   .relation-label{font-size:12px;fill:#0066cc;paint-order:stroke;stroke:#f5f5f7;stroke-width:5px;stroke-linejoin:round;text-anchor:middle}
   .node circle{fill:#fff;stroke:#d1d1d6;stroke-width:1.4}.node.domain circle{fill:#edf6ff;stroke:#69aef5;stroke-width:2}.node.root circle{fill:#1d1d1f;stroke:#1d1d1f}.node text{fill:#1d1d1f;text-anchor:middle;font-size:13px;font-weight:600;pointer-events:none}.node.domain text{font-size:16px;font-weight:700}.node.root text{fill:#fff;font-size:20px;font-weight:750}
+  .progressive{transition:opacity .28s ease}.hidden-detail{opacity:0;pointer-events:none}.visible-detail{opacity:1}
   .legend{position:fixed;left:16px;bottom:16px;background:rgba(255,255,255,.86);backdrop-filter:blur(18px);padding:10px 12px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.08);font-size:12px;color:#48484a;pointer-events:none}.legend div+div{margin-top:5px}.plain,.dash{display:inline-block;width:28px;margin-right:7px;vertical-align:middle;border-top:1.5px solid #8e8e93}.dash{border-top-style:dashed;border-color:#0071e3}
+  .hint{position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:9px 13px;border-radius:999px;background:rgba(255,255,255,.86);box-shadow:0 8px 30px rgba(0,0,0,.07);font-size:13px;color:#48484a;pointer-events:none;transition:opacity .3s ease}
 </style>
 </head>
 <body>
@@ -19,10 +21,11 @@
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#0071e3"/></marker></defs>
 <g id="viewport"><g id="edges"></g><g id="labels"></g><g id="nodes"></g></g>
 </svg>
+<div class="hint" id="hint">Hineinzoomen, um Begriffe und Relationen zu entdecken</div>
 <div class="legend"><div><span class="plain"></span>Zugehörigkeit / Unterbegriff</div><div><span class="dash"></span>benannte inhaltliche Relation</div></div>
 <script>
 (()=>{
-const svg=document.getElementById('map'),viewport=document.getElementById('viewport'),edgeLayer=document.getElementById('edges'),labelLayer=document.getElementById('labels'),nodeLayer=document.getElementById('nodes');
+const svg=document.getElementById('map'),viewport=document.getElementById('viewport'),edgeLayer=document.getElementById('edges'),labelLayer=document.getElementById('labels'),nodeLayer=document.getElementById('nodes'),hint=document.getElementById('hint');
 const nodes=[
 ['root','Berechenbarkeit',0,0,120,'root'],
 ['fun','Funktionen & Verfahren',-720,-420,92,'domain'],['rep','Darstellung & Mengen',0,-650,92,'domain'],['dec','Entscheidbarkeit & Sprachen',720,-420,92,'domain'],['mod','Formale Modelle',720,420,92,'domain'],['lim','Grenzen der Berechenbarkeit',0,650,92,'domain'],['cmp','Komplexitätstheorie',-720,420,92,'domain'],
@@ -50,16 +53,19 @@ const relations=[
 ['classes','cmp','strukturieren'],['pnp','classes','vergleicht'],['npcomplete','pnp','ist zentral für'],['graphs','npcomplete','liefert Beispiele für']];
 const byId=new Map(nodes.map(n=>[n.id,n]));
 function el(name,attrs={}){const e=document.createElementNS('http://www.w3.org/2000/svg',name);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);return e}
-function lineBetween(a,b,cls){const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;return el('line',{x1:a.x+dx/d*a.r,y1:a.y+dy/d*a.r,x2:b.x-dx/d*b.r,y2:b.y-dy/d*b.r,class:cls})}
-hierarchy.forEach(([a,b])=>edgeLayer.appendChild(lineBetween(byId.get(a),byId.get(b),'edge')));
-relations.forEach(([a,b,label])=>{const A=byId.get(a),B=byId.get(b);edgeLayer.appendChild(lineBetween(A,B,'relation'));const t=el('text',{x:(A.x+B.x)/2,y:(A.y+B.y)/2-8,class:'relation-label'});t.textContent=label;labelLayer.appendChild(t)});
+function lineBetween(a,b,cls){const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;return el('line',{x1:a.x+dx/d*a.r,y1:a.y+dy/d*a.r,x2:b.x-dx/d*b.r,y2:b.y-dy/d*b.r,class:cls+' progressive'})}
+const hierarchyEls=[];hierarchy.forEach(([a,b])=>{const line=lineBetween(byId.get(a),byId.get(b),'edge');const structural=byId.get(a).type==='root';if(!structural)line.classList.add('hidden-detail');hierarchyEls.push({el:line,structural});edgeLayer.appendChild(line)});
+const relationEls=[];relations.forEach(([a,b,label])=>{const A=byId.get(a),B=byId.get(b),line=lineBetween(A,B,'relation');line.classList.add('hidden-detail');edgeLayer.appendChild(line);const t=el('text',{x:(A.x+B.x)/2,y:(A.y+B.y)/2-8,class:'relation-label progressive hidden-detail'});t.textContent=label;labelLayer.appendChild(t);relationEls.push({line,label:t})});
 function wrap(title,max=18){const words=title.split(/\s+/),lines=[];let line='';for(const w of words){const next=line?line+' '+w:w;if(next.length>max&&line){lines.push(line);line=w}else line=next}if(line)lines.push(line);return lines.slice(0,4)}
-nodes.forEach(n=>{const g=el('g',{class:'node '+n.type,transform:`translate(${n.x} ${n.y})`});g.appendChild(el('circle',{r:n.r}));const lines=wrap(n.title,n.type==='root'?22:n.type==='domain'?19:17),lh=n.type==='root'?23:n.type==='domain'?19:16;lines.forEach((s,i)=>{const t=el('text',{x:0,y:(i-(lines.length-1)/2)*lh+5});t.textContent=s;g.appendChild(t)});nodeLayer.appendChild(g)});
-let scale=1,tx=0,ty=0,drag=false,lastX=0,lastY=0,pointer=null;function apply(){viewport.setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`)}
-svg.addEventListener('wheel',e=>{e.preventDefault();const rect=svg.getBoundingClientRect(),px=e.clientX-rect.left,py=e.clientY-rect.top,f=Math.exp(-e.deltaY*.0012),ns=Math.max(.25,Math.min(8,scale*f));tx=px-(px-tx)*ns/scale;ty=py-(py-ty)*ns/scale;scale=ns;apply()},{passive:false});
+const conceptEls=[];nodes.forEach(n=>{const g=el('g',{class:'node '+n.type+' progressive',transform:`translate(${n.x} ${n.y})`});if(n.type==='concept')g.classList.add('hidden-detail');g.appendChild(el('circle',{r:n.r}));const lines=wrap(n.title,n.type==='root'?22:n.type==='domain'?19:17),lh=n.type==='root'?23:n.type==='domain'?19:16;lines.forEach((s,i)=>{const t=el('text',{x:0,y:(i-(lines.length-1)/2)*lh+5});t.textContent=s;g.appendChild(t)});nodeLayer.appendChild(g);if(n.type==='concept')conceptEls.push(g)});
+let scale=1,tx=0,ty=0,drag=false,lastX=0,lastY=0,pointer=null;
+function setVisible(el,visible){el.classList.toggle('hidden-detail',!visible);el.classList.toggle('visible-detail',visible)}
+function updateVisibility(){const showConcepts=scale>=1.35,showRelations=scale>=2.15,showLabels=scale>=2.65;conceptEls.forEach(el=>setVisible(el,showConcepts));hierarchyEls.forEach(item=>{if(!item.structural)setVisible(item.el,showConcepts)});relationEls.forEach(item=>{setVisible(item.line,showRelations);setVisible(item.label,showLabels)});hint.style.opacity=scale<1.35?'1':'0'}
+function apply(){viewport.setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`);updateVisibility()}
+svg.addEventListener('wheel',e=>{e.preventDefault();const rect=svg.getBoundingClientRect(),px=e.clientX-rect.left,py=e.clientY-rect.top,f=Math.exp(-e.deltaY*.0012),ns=Math.max(.6,Math.min(8,scale*f));tx=px-(px-tx)*ns/scale;ty=py-(py-ty)*ns/scale;scale=ns;apply()},{passive:false});
 svg.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag=true;pointer=e.pointerId;lastX=e.clientX;lastY=e.clientY;svg.classList.add('dragging');svg.setPointerCapture(pointer)});
 svg.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==pointer)return;tx+=e.clientX-lastX;ty+=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;apply()});
-function stop(e){if(!drag)return;drag=false;svg.classList.remove('dragging');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId)}svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
+function stop(e){if(!drag)return;drag=false;svg.classList.remove('dragging');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId)}svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);updateVisibility();
 })();
 </script>
 </body>
