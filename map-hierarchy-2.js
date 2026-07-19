@@ -1,0 +1,7 @@
+window.MAP_H.push(
+['npcomplete','polyReduction'],['polyReduction','polyReductionFn'],['polyReduction','reductionComposition'],['polyReduction','preserveP'],['polyReduction','preserveNP'],['npcomplete','npHard'],['npcomplete','npCompleteDef'],['npHard','npHardAll'],['npCompleteDef','pEqualsNpCriterion'],
+['npcomplete','sat'],['sat','booleanFormula'],['sat','satisfyingAssignment'],['sat','satInNP'],['sat','cookLevin'],['cookLevin','computationTableau'],['computationTableau','configurationVariables'],['computationTableau','transitionConstraints'],['computationTableau','acceptingConstraint'],
+['npcomplete','threeSat'],['npcomplete','twoSat'],['npcomplete','subsetSum'],['npcomplete','partition'],['npcomplete','binPacking'],['npcomplete','hamiltonCycle'],['hamiltonCycle','directedHamilton'],['hamiltonCycle','undirectedHamilton'],['npcomplete','tsp'],['graphs','edgeCover'],
+['npcomplete','satTo3Sat'],['npcomplete','threeSatToSubset'],['npcomplete','subsetToPartition'],['npcomplete','partitionToBin'],['npcomplete','threeSatToHamilton'],['npcomplete','hamiltonToTsp'],
+['classNP','certificateExamples'],['certificateExamples','subsetCertificate'],['certificateExamples','partitionCertificate'],['certificateExamples','hamiltonCertificate'],['certificateExamples','tspCertificate']
+);
