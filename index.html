@@ -73,36 +73,94 @@ const by=new Map(nodes.map(n=>[n.id,n]));
 const parent=new Map(H.map(([a,b])=>[b,a]));
 const domainIds=['fun','rep','dec','tm','models','limits','complexity'];
 domainIds.forEach((id,i)=>{const n=by.get(id),a=-Math.PI/2+i*Math.PI*2/domainIds.length;n.ax=Math.cos(a)*850;n.ay=Math.sin(a)*850});
-by.get('root').fixed=true;by.get('root').x=0;by.get('root').y=0;
+by.get('root').fixed=true; by.get('root').x=0; by.get('root').y=0;
 domainIds.forEach(id=>{const n=by.get(id);n.x=n.ax;n.y=n.ay;n.fixed=true});
-const links=[...H.map(([a,b])=>({a:by.get(a),b:by.get(b),kind:'h'})),...R.map(([a,b])=>({a:by.get(a),b:by.get(b),kind:'r'}))];
-function desired(l){if(l.a.type==='root'||l.b.type==='root')return 850;if(l.a.type==='domain'||l.b.type==='domain')return 245;return l.kind==='h'?155:235}
+const links=[
+...H.map(([a,b])=>({a:by.get(a),b:by.get(b),kind:'h'})),
+...R.map(([a,b])=>({a:by.get(a),b:by.get(b),kind:'r'}))
+];
+function desired(l){
+ if(l.a.type==='root'||l.b.type==='root') return 850;
+ if(l.a.type==='domain'||l.b.type==='domain') return 245;
+ return l.kind==='h'?155:235;
+}
 function layout(){
  const movable=nodes.filter(n=>!n.fixed);
  for(let iter=0;iter<520;iter++){
-  const cool=1-iter/520;
-  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
-   const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy+1,d=Math.sqrt(d2),nx=dx/d,ny=dy/d,min=a.r+b.r+24;
-   let f=9000/d2;if(d<min)f+=(min-d)*.28;
-   if(!a.fixed){a.vx-=nx*f;a.vy-=ny*f}if(!b.fixed){b.vx+=nx*f;b.vy+=ny*f}
-  }
-  for(const l of links){const dx=l.b.x-l.a.x,dy=l.b.y-l.a.y,d=Math.hypot(dx,dy)||1,nx=dx/d,ny=dy/d,k=l.kind==='h'?.022:.008,f=(d-desired(l))*k;if(!l.a.fixed){l.a.vx+=nx*f;l.a.vy+=ny*f}if(!l.b.fixed){l.b.vx-=nx*f;l.b.vy-=ny*f}}
-  for(const n of movable){const p=parent.get(n.id)?by.get(parent.get(n.id)):null;if(p&&p.type==='domain'){n.vx+=(p.x-n.x)*.0018;n.vy+=(p.y-n.y)*.0018}n.vx*=.78;n.vy*=.78;const max=14*cool+1.5,sp=Math.hypot(n.vx,n.vy);if(sp>max){n.vx=n.vx/sp*max;n.vy=n.vy/sp*max}n.x+=n.vx;n.y+=n.vy}
+   const cool=1-iter/520;
+   for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+     const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy+1,d=Math.sqrt(d2),nx=dx/d,ny=dy/d;
+     const min=a.r+b.r+24;
+     let f=9000/d2;
+     if(d<min) f+=(min-d)*0.28;
+     if(!a.fixed){a.vx-=nx*f;a.vy-=ny*f}
+     if(!b.fixed){b.vx+=nx*f;b.vy+=ny*f}
+   }
+   for(const l of links){
+     const dx=l.b.x-l.a.x,dy=l.b.y-l.a.y,d=Math.hypot(dx,dy)||1,nx=dx/d,ny=dy/d;
+     const k=l.kind==='h'?.022:.008, f=(d-desired(l))*k;
+     if(!l.a.fixed){l.a.vx+=nx*f;l.a.vy+=ny*f}
+     if(!l.b.fixed){l.b.vx-=nx*f;l.b.vy-=ny*f}
+   }
+   for(const n of movable){
+     const p=parent.get(n.id)?by.get(parent.get(n.id)):null;
+     if(p&&p.type==='domain'){n.vx+=(p.x-n.x)*.0018;n.vy+=(p.y-n.y)*.0018}
+     n.vx*=.78;n.vy*=.78;
+     const max=14*cool+1.5,sp=Math.hypot(n.vx,n.vy);
+     if(sp>max){n.vx=n.vx/sp*max;n.vy=n.vy/sp*max}
+     n.x+=n.vx;n.y+=n.vy;
+   }
  }
  for(let pass=0;pass<180;pass++){
-  let moved=false;
-  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
-   const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||.001,min=a.r+b.r+28;
-   if(d<min){moved=true;const push=(min-d)/2,nx=dx/d,ny=dy/d;if(!a.fixed){a.x-=nx*push;a.y-=ny*push}if(!b.fixed){b.x+=nx*push;b.y+=ny*push}}
-  }
-  if(!moved)break;
+   let moved=false;
+   for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+     const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||.001,min=a.r+b.r+28;
+     if(d<min){moved=true;const push=(min-d)/2,nx=dx/d,ny=dy/d;
+       if(!a.fixed){a.x-=nx*push;a.y-=ny*push}
+       if(!b.fixed){b.x+=nx*push;b.y+=ny*push}
+     }
+   }
+   if(!moved)break;
  }
 }
 layout();
 function el(n,a={}){const e=document.createElementNS('http://www.w3.org/2000/svg',n);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e}
 function line(a,b,c){const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;return el('line',{x1:a.x+dx/d*a.r,y1:a.y+dy/d*a.r,x2:b.x-dx/d*b.r,y2:b.y-dy/d*b.r,class:c+' progressive'})}
-const hEls=[];H.forEach(([a,b])=>{const x=line(by.get(a),by.get(b),'edge'),root=by.get(a).type==='root';if(!root)x.classList.add('hidden');hEls.push({x,root});E.appendChild(x)});
-const rEls=[];R.forEach(([a,b,t])=>{const A=by.get(a),B=by.get(b),x=line(A,B,'relation');x.classList.add('hidden');E.appendChild(x);const q=el('text',{x:(A.x+B.x)/2,y:(A.y+B.y)/2-8,class:'relation-label progressive hidden'});q.textContent=t;L.appendChild(q);rEls.push({x,q})});
+const hEls=[];H.forEach(([a,b])=>{const x=line(by.get(a),by.get(b),'edge');const root=by.get(a).type==='root';if(!root)x.classList.add('hidden');hEls.push({x,root});E.appendChild(x)});
+const rEls=[];R.forEach(([a,b,t])=>{const A=by.get(a),B=by.get(b),x=line(A,B,'relation');x.classList.add('hidden');E.appendChild(x);const q=el('text',{x:0,y:0,class:'relation-label progressive hidden'});q.textContent=t;L.appendChild(q);rEls.push({x,q,A,B})});
+function placeRelationLabels(){
+  const placed=[];
+  const rectOverlap=(a,b)=>Math.max(0,Math.min(a.x2,b.x2)-Math.max(a.x1,b.x1))*Math.max(0,Math.min(a.y2,b.y2)-Math.max(a.y1,b.y1));
+  const circleRectOverlap=(n,r)=>{
+    const cx=Math.max(r.x1,Math.min(n.x,r.x2)),cy=Math.max(r.y1,Math.min(n.y,r.y2));
+    const dx=n.x-cx,dy=n.y-cy,rr=n.r+12;
+    return dx*dx+dy*dy<rr*rr;
+  };
+  for(const item of rEls){
+    const {A,B,q}=item,dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;
+    const w=Math.max(44,q.getComputedTextLength()+18),h=24;
+    let best=null;
+    const along=[.5,.4,.6,.32,.68,.24,.76];
+    const offsets=[0,18,-18,34,-34,52,-52,72,-72,96,-96];
+    for(const t of along){
+      for(const off of offsets){
+        const x=A.x+dx*t+nx*off,y=A.y+dy*t+ny*off;
+        const r={x1:x-w/2,x2:x+w/2,y1:y-h/2,y2:y+h/2};
+        let score=Math.abs(t-.5)*140+Math.abs(off)*.35;
+        for(const n of nodes) if(circleRectOverlap(n,r)) score+=250000;
+        for(const p of placed){const area=rectOverlap(r,p);if(area)score+=100000+area*20;}
+        for(const p of placed){
+          const gx=Math.max(0,Math.max(p.x1-r.x2,r.x1-p.x2));
+          const gy=Math.max(0,Math.max(p.y1-r.y2,r.y1-p.y2));
+          const gap=Math.hypot(gx,gy);if(gap<14)score+=(14-gap)*120;
+        }
+        if(!best||score<best.score)best={x,y,r,score};
+      }
+    }
+    q.setAttribute('x',best.x);q.setAttribute('y',best.y+4);placed.push(best.r);
+  }
+}
+placeRelationLabels();
 function wrap(s,m=18){const w=s.split(/\s+/),o=[];let l='';for(const z of w){const n=l?l+' '+z:z;if(n.length>m&&l){o.push(l);l=z}else l=n}if(l)o.push(l);return o.slice(0,4)}
 const cEls=[];nodes.forEach(n=>{const g=el('g',{class:'node '+n.type+' progressive',transform:`translate(${n.x} ${n.y})`});if(n.type==='concept')g.classList.add('hidden');g.appendChild(el('circle',{r:n.r}));const ls=wrap(n.title,n.type==='root'?22:n.type==='domain'?19:17),lh=n.type==='root'?23:n.type==='domain'?19:16;ls.forEach((s,i)=>{const t=el('text',{x:0,y:(i-(ls.length-1)/2)*lh+5});t.textContent=s;g.appendChild(t)});N.appendChild(g);if(n.type==='concept')cEls.push(g)});
 let s=1,tx=0,ty=0,drag=false,lx=0,ly=0,pid=null;
