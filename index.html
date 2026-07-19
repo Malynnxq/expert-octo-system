@@ -1,17 +1,268 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>New Project</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>Berechenbarkeit – Wissenskarte</title>
   <style>
-    html, body {
-      width: 100%;
-      min-height: 100%;
-      margin: 0;
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #f5f5f7; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; }
+    canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; cursor: grab; touch-action: none; user-select: none; }
+    canvas.dragging { cursor: grabbing; }
+    .legend {
+      position: fixed; left: 16px; bottom: 16px; z-index: 2;
+      padding: 10px 12px; border-radius: 13px; background: rgba(255,255,255,.78);
+      box-shadow: 0 8px 30px rgba(0,0,0,.08); backdrop-filter: blur(18px);
+      font-size: 12px; color: #48484a; pointer-events: none;
     }
+    .legend div + div { margin-top: 5px; }
+    .sample-line { display:inline-block; width:28px; height:0; margin-right:7px; vertical-align:middle; border-top:1.5px solid rgba(29,29,31,.35); }
+    .sample-arrow { display:inline-block; width:28px; height:0; margin-right:7px; vertical-align:middle; border-top:1.5px dashed #0071e3; }
   </style>
 </head>
 <body>
+  <canvas id="map" aria-label="Konzeptorientierte Wissenskarte zu Berechenbarkeit"></canvas>
+  <div class="legend">
+    <div><span class="sample-line"></span>Zugehörigkeit / Unterbegriff</div>
+    <div><span class="sample-arrow"></span>benannte inhaltliche Relation</div>
+  </div>
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("map");
+  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+  const DPR_CAP = 2;
+  const TWO_PI = Math.PI * 2;
+
+  const nodes = [
+    {id:"root", title:"Berechenbarkeit", group:"root", r:112},
+
+    {id:"functions", title:"Funktionen & Berechnungsverfahren", group:"domain", r:78},
+    {id:"procedure", title:"Berechnungsverfahren", group:"concept"},
+    {id:"algorithm", title:"Algorithmus", group:"concept"},
+    {id:"effective", title:"effektives Verfahren", group:"concept"},
+    {id:"mapping", title:"Abbildung f: A → B", group:"concept"},
+    {id:"total", title:"totale Funktion", group:"concept"},
+    {id:"partial", title:"partielle Funktion", group:"concept"},
+    {id:"defined", title:"definierter Funktionswert", group:"concept"},
+    {id:"undefined", title:"undefiniert (⊥)", group:"concept"},
+    {id:"termination", title:"Terminierung", group:"concept"},
+    {id:"input", title:"Eingabe", group:"concept"},
+    {id:"processing", title:"Verarbeitung", group:"concept"},
+    {id:"output", title:"Ausgabe", group:"concept"},
+
+    {id:"representation", title:"Darstellung & Mengen", group:"domain", r:78},
+    {id:"symbols", title:"endliches Alphabet", group:"concept"},
+    {id:"strings", title:"Wörter Σ*", group:"concept"},
+    {id:"countable", title:"abzählbare Menge", group:"concept"},
+    {id:"uncountable", title:"überabzählbare Menge", group:"concept"},
+    {id:"naturals", title:"natürliche Zahlen ℕ", group:"concept"},
+    {id:"integers", title:"ganze Zahlen ℤ", group:"concept"},
+    {id:"rationals", title:"rationale Zahlen ℚ", group:"concept"},
+    {id:"reals", title:"reelle Zahlen ℝ", group:"concept"},
+    {id:"powerset", title:"Potenzmenge P(ℕ)", group:"concept"},
+    {id:"programs", title:"Programme", group:"concept"},
+
+    {id:"decision", title:"Entscheidbarkeit & Sprachen", group:"domain", r:78},
+    {id:"decisionProblem", title:"Entscheidungsproblem", group:"concept"},
+    {id:"characteristic", title:"charakteristische Funktion", group:"concept"},
+    {id:"decidableSet", title:"entscheidbare Menge", group:"concept"},
+    {id:"undecidableSet", title:"unentscheidbare Menge", group:"concept"},
+    {id:"language", title:"formale Sprache", group:"concept"},
+    {id:"decidableLanguage", title:"entscheidbare Sprache", group:"concept"},
+    {id:"type1", title:"Typ-1-Sprache", group:"concept"},
+    {id:"primeSet", title:"Menge der Primzahlen", group:"concept"},
+    {id:"primeLanguage", title:"Binärsprache der Primzahlen", group:"concept"},
+
+    {id:"models", title:"Formale Berechnungsmodelle", group:"domain", r:78},
+    {id:"turing", title:"Turingmaschine", group:"concept"},
+    {id:"multitape", title:"Mehrband-Turingmaschine", group:"concept"},
+    {id:"register", title:"Registermaschine", group:"concept"},
+    {id:"while", title:"WHILE-Programme", group:"concept"},
+    {id:"goto", title:"GOTO-Programme", group:"concept"},
+    {id:"muRecursive", title:"µ-rekursive Funktionen", group:"concept"},
+    {id:"generalRecursive", title:"allgemein rekursive Funktionen", group:"concept"},
+    {id:"lambda", title:"λ-definierbare Funktionen", group:"concept"},
+    {id:"formalization", title:"formaler Berechenbarkeitsbegriff", group:"concept"},
+    {id:"intuitive", title:"intuitiver Berechenbarkeitsbegriff", group:"concept"},
+    {id:"church", title:"Churchsche These", group:"concept", r:48},
+
+    {id:"examples", title:"Grenz- und Beispielbegriffe", group:"domain", r:78},
+    {id:"piPrefix", title:"π-Präfix-Test", group:"concept"},
+    {id:"piOccurrence", title:"Auftreten einer Ziffernfolge in π", group:"concept"},
+    {id:"semiDecision", title:"semi-entscheidbares Suchverfahren", group:"concept"},
+    {id:"computableReal", title:"berechenbare reelle Zahl", group:"concept"},
+    {id:"noncomputableFunction", title:"nicht berechenbare Funktion", group:"concept"},
+    {id:"noncomputableReal", title:"nicht berechenbare reelle Zahl", group:"concept"},
+    {id:"halting", title:"Halteproblem", group:"concept"},
+    {id:"reduction", title:"Reduzierbarkeit", group:"concept"},
+    {id:"pcp", title:"Postsches Korrespondenzproblem", group:"concept"},
+    {id:"goedel", title:"Gödelscher Satz", group:"concept"},
+
+    {id:"complexity", title:"Komplexitätstheorie", group:"domain", r:78},
+    {id:"classes", title:"Komplexitätsklassen", group:"concept"},
+    {id:"pnp", title:"P-NP-Problem", group:"concept"},
+    {id:"npcomplete", title:"NP-Vollständigkeit", group:"concept"},
+    {id:"graphProblems", title:"Komplexität von Graphenproblemen", group:"concept"}
+  ];
+
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  nodes.forEach(n => { n.r ||= 31; n.phase = Math.random() * TWO_PI; });
+
+  const hierarchy = [
+    ["root","functions"],["root","representation"],["root","decision"],["root","models"],["root","examples"],["root","complexity"],
+    ["functions","procedure"],["functions","mapping"],["functions","total"],["functions","partial"],["functions","termination"],["functions","algorithm"],["functions","effective"],
+    ["procedure","input"],["procedure","processing"],["procedure","output"],["total","defined"],["partial","undefined"],
+    ["representation","symbols"],["representation","strings"],["representation","countable"],["representation","uncountable"],["representation","programs"],
+    ["countable","naturals"],["countable","integers"],["countable","rationals"],["uncountable","reals"],["uncountable","powerset"],
+    ["decision","decisionProblem"],["decision","characteristic"],["decision","decidableSet"],["decision","undecidableSet"],["decision","language"],
+    ["language","decidableLanguage"],["decidableLanguage","type1"],["decidableSet","primeSet"],["decidableLanguage","primeLanguage"],
+    ["models","turing"],["models","multitape"],["models","register"],["models","while"],["models","goto"],["models","muRecursive"],["models","generalRecursive"],["models","lambda"],["models","formalization"],["models","intuitive"],["models","church"],
+    ["examples","piPrefix"],["examples","piOccurrence"],["examples","semiDecision"],["examples","computableReal"],["examples","noncomputableFunction"],["examples","noncomputableReal"],["examples","halting"],["examples","reduction"],["examples","pcp"],["examples","goedel"],
+    ["complexity","classes"],["complexity","pnp"],["complexity","npcomplete"],["complexity","graphProblems"]
+  ];
+
+  const relations = [
+    ["procedure","mapping","realisiert"],
+    ["algorithm","procedure","ist eine Form von"],
+    ["effective","algorithm","charakterisiert"],
+    ["input","processing","wird verarbeitet durch"],
+    ["processing","output","erzeugt"],
+    ["total","termination","terminiert für jede Eingabe"],
+    ["partial","termination","terminiert nicht zwingend"],
+    ["partial","undefined","kann liefern"],
+    ["symbols","strings","erzeugen"],
+    ["strings","countable","bildet eine"],
+    ["programs","countable","sind"],
+    ["programs","noncomputableFunction","können nicht alle Funktionen darstellen"],
+    ["decisionProblem","characteristic","wird dargestellt durch"],
+    ["characteristic","decidableSet","ist berechenbar genau dann, wenn"],
+    ["language","characteristic","wird entschieden durch"],
+    ["primeSet","characteristic","besitzt"],
+    ["primeSet","primeLanguage","wird kodiert als"],
+    ["primeLanguage","decidableLanguage","ist eine"],
+    ["type1","decidableLanguage","ist"],
+    ["turing","formalization","definiert"],
+    ["while","formalization","definiert äquivalent"],
+    ["goto","formalization","definiert äquivalent"],
+    ["muRecursive","formalization","definiert äquivalent"],
+    ["lambda","formalization","definiert äquivalent"],
+    ["church","formalization","identifiziert mit"],
+    ["church","intuitive","identifiziert mit"],
+    ["piPrefix","total","ist"],
+    ["piOccurrence","semiDecision","führt natürlich zu"],
+    ["semiDecision","partial","ist typischerweise"],
+    ["halting","undecidableSet","liefert Beispiel für"],
+    ["reduction","undecidableSet","überträgt"],
+    ["pcp","undecidableSet","ist"],
+    ["goedel","formalization","zeigt Grenzen formaler Systeme"],
+    ["computableReal","algorithm","wird approximiert durch"],
+    ["noncomputableReal","uncountable","existiert wegen"],
+    ["classes","complexity","strukturieren"],
+    ["pnp","classes","vergleicht"],
+    ["npcomplete","pnp","ist zentral für"],
+    ["graphProblems","npcomplete","liefert Beispiele für"]
+  ];
+
+  // Planetary arrangement: domains around root, concepts around their domain.
+  const domainIds = ["functions","representation","decision","models","examples","complexity"];
+  const domainOrbit = 760;
+  domainIds.forEach((id, i) => {
+    const d = byId.get(id);
+    const a = -Math.PI/2 + i*TWO_PI/domainIds.length;
+    d.x = Math.cos(a)*domainOrbit; d.y = Math.sin(a)*domainOrbit;
+  });
+  byId.get("root").x = 0; byId.get("root").y = 0;
+
+  const children = new Map(domainIds.map(id => [id, []]));
+  hierarchy.forEach(([a,b]) => { if (children.has(a)) children.get(a).push(b); });
+  domainIds.forEach((id, di) => {
+    const d = byId.get(id); const list = children.get(id);
+    let cursor = 0, ring = 1;
+    while (cursor < list.length) {
+      const take = Math.min(10 + ring*4, list.length-cursor);
+      const orbit = 165 + ring*115;
+      for (let i=0;i<take;i++) {
+        const n = byId.get(list[cursor+i]);
+        const a = i*TWO_PI/take + ring*.58 + di*.31;
+        n.x = d.x + Math.cos(a)*orbit; n.y = d.y + Math.sin(a)*orbit;
+      }
+      cursor += take; ring++;
+    }
+  });
+
+  // Place second-level concepts near their parent if not explicitly placed.
+  hierarchy.forEach(([a,b], idx) => {
+    const p=byId.get(a), n=byId.get(b);
+    if (!Number.isFinite(n.x)) {
+      const angle = (idx*2.399963229728653) % TWO_PI;
+      n.x = p.x + Math.cos(angle)*135;
+      n.y = p.y + Math.sin(angle)*135;
+    }
+  });
+
+  const camera = {scale:.18,x:0,y:0,targetScale:.18,targetX:0,targetY:0};
+  let width=1,height=1,dpr=1,frame=0,dragging=false,pointerId=null,lastX=0,lastY=0;
+
+  function resize(){
+    dpr=Math.min(devicePixelRatio||1,DPR_CAP); width=Math.max(1,innerWidth); height=Math.max(1,innerHeight);
+    canvas.width=Math.round(width*dpr); canvas.height=Math.round(height*dpr);
+    canvas.style.width=width+"px"; canvas.style.height=height+"px"; schedule();
+  }
+  function point(n,now){
+    const drift=n.group==="root"?0:Math.min(.7,.25/Math.max(camera.scale,.001));
+    return {x:width/2+(n.x+Math.cos(now*.00012+n.phase)*drift-camera.x)*camera.scale,
+            y:height/2+(n.y+Math.sin(now*.00010+n.phase)*drift-camera.y)*camera.scale};
+  }
+  function wrap(text,max){
+    const words=text.split(/\s+/), lines=[]; let line="";
+    for(const w of words){ const t=line?line+" "+w:w; if(ctx.measureText(t).width>max&&line){lines.push(line);line=w}else line=t; }
+    if(line)lines.push(line); return lines;
+  }
+  function arrow(a,b,label,alpha){
+    const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len;
+    const endX=b.x-ux*10,endY=b.y-uy*10;
+    ctx.save(); ctx.globalAlpha=alpha; ctx.strokeStyle="#0071e3"; ctx.fillStyle="#0071e3";
+    ctx.setLineDash([5,5]); ctx.lineWidth=1.2; ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(endX,endY);ctx.stroke();ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(endX,endY);ctx.lineTo(endX-ux*8-uy*4,endY-uy*8+ux*4);ctx.lineTo(endX-ux*8+uy*4,endY-uy*8-ux*4);ctx.closePath();ctx.fill();
+    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2; ctx.font="600 10px -apple-system,Arial"; const w=ctx.measureText(label).width+10;
+    ctx.fillStyle="rgba(245,245,247,.9)";ctx.fillRect(mx-w/2,my-9,w,16);ctx.fillStyle="#005bb5";ctx.textAlign="center";ctx.fillText(label,mx,my+3);ctx.restore();
+  }
+  function drawNode(n,p){
+    const r=n.r*camera.scale, visible=r>3; if(!visible)return;
+    ctx.save();
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,TWO_PI);
+    ctx.fillStyle=n.group==="root"?"#1d1d1f":n.group==="domain"?"rgba(235,245,255,.98)":"rgba(255,255,255,.98)";
+    ctx.fill();ctx.lineWidth=Math.max(.7,Math.min(2,r*.035));ctx.strokeStyle=n.group==="domain"?"rgba(0,113,227,.38)":"rgba(29,29,31,.13)";ctx.stroke();
+    if(r>9){ const fs=Math.max(8,Math.min(n.group==="root"?20:n.group==="domain"?16:13,r*.25));
+      ctx.font=`${n.group==="concept"?620:720} ${fs}px -apple-system,Arial`;ctx.fillStyle=n.group==="root"?"white":"#1d1d1f";ctx.textAlign="center";ctx.textBaseline="middle";
+      const lines=wrap(n.title,r*1.55).slice(0,5),lh=fs*1.08,start=p.y-(lines.length-1)*lh/2;lines.forEach((line,i)=>ctx.fillText(line,p.x,start+i*lh)); }
+    ctx.restore();
+  }
+  function draw(){
+    frame=0; const now=performance.now(); camera.scale+=(camera.targetScale-camera.scale)*.22; camera.x+=(camera.targetX-camera.x)*.22; camera.y+=(camera.targetY-camera.y)*.22;
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle="#f5f5f7";ctx.fillRect(0,0,width,height);
+    const glow=ctx.createRadialGradient(width/2,height/2,0,width/2,height/2,Math.max(width,height)*.7);glow.addColorStop(0,"rgba(0,113,227,.055)");glow.addColorStop(1,"rgba(0,113,227,0)");ctx.fillStyle=glow;ctx.fillRect(0,0,width,height);
+    const pts=new Map(nodes.map(n=>[n,point(n,now)]));
+    ctx.lineCap="round";
+    hierarchy.forEach(([a,b])=>{const p=pts.get(byId.get(a)),q=pts.get(byId.get(b));ctx.strokeStyle="rgba(29,29,31,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();});
+    if(camera.scale>.085) relations.forEach(([a,b,label])=>arrow(pts.get(byId.get(a)),pts.get(byId.get(b)),label,Math.min(1,(camera.scale-.085)*8)));
+    [...nodes].sort((a,b)=>a.r-b.r).forEach(n=>drawNode(n,pts.get(n)));
+    if(Math.abs(camera.scale-camera.targetScale)>.0001||Math.abs(camera.x-camera.targetX)>.001||Math.abs(camera.y-camera.targetY)>.001) schedule();
+  }
+  function schedule(){if(!frame)frame=requestAnimationFrame(draw)}
+  function zoomAt(cx,cy,dy){const rect=canvas.getBoundingClientRect(),px=cx-rect.left-width/2,py=cy-rect.top-height/2,old=camera.targetScale,f=Math.exp(-dy*.0032),ns=Math.max(.035,Math.min(80,old*f)),wx=camera.targetX+px/old,wy=camera.targetY+py/old;camera.targetScale=ns;camera.targetX=wx-px/ns;camera.targetY=wy-py/ns;schedule();}
+  canvas.addEventListener("wheel",e=>{e.preventDefault();zoomAt(e.clientX,e.clientY,e.deltaY)},{passive:false});
+  canvas.addEventListener("pointerdown",e=>{if(e.button!==0)return;dragging=true;pointerId=e.pointerId;lastX=e.clientX;lastY=e.clientY;canvas.classList.add("dragging");canvas.setPointerCapture(e.pointerId)});
+  canvas.addEventListener("pointermove",e=>{if(!dragging||e.pointerId!==pointerId)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;camera.targetX-=dx/camera.targetScale;camera.targetY-=dy/camera.targetScale;camera.x=camera.targetX;camera.y=camera.targetY;schedule()});
+  function stop(e){if(!dragging)return;dragging=false;canvas.classList.remove("dragging");if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);pointerId=null;schedule()}
+  canvas.addEventListener("pointerup",stop);canvas.addEventListener("pointercancel",stop);window.addEventListener("resize",resize);
+  window.__COMPUTABILITY_MAP_STATS__={nodes:nodes.length,hierarchyEdges:hierarchy.length,semanticRelations:relations.length,source:"berechenbarkeit1.pdf"};
+  resize();schedule();
+})();
+</script>
 </body>
 </html>
